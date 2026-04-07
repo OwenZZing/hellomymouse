@@ -60,8 +60,8 @@ function RecentCommits() {
   if (!commits.length) return null;
 
   return (
-    <div className="mb-16">
-      <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4">
+    <div className="mb-8">
+      <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">
         Recent commits
       </p>
       <div className="space-y-2">
@@ -132,25 +132,25 @@ function StairWidget() {
 
 export default function Home() {
   return (
-    <main className="max-w-4xl mx-auto px-6 py-24">
+    <main className="max-w-4xl mx-auto px-6 py-12">
       {/* Hero */}
-      <section className="mb-16">
-        <p className="text-violet-400 font-mono text-sm mb-4 tracking-widest uppercase">
+      <section className="mb-8">
+        <p className="text-violet-400 font-mono text-sm mb-2 tracking-widest uppercase">
           hellomymouse.com
         </p>
-        <h1 className="text-5xl font-bold text-zinc-100 mb-4 tracking-tight">
+        <h1 className="text-5xl font-bold text-zinc-100 mb-2 tracking-tight">
           Hellomymouse
         </h1>
-        <p className="text-xl text-zinc-400 mb-6">Kyungri Kim · Ph.D. in Neuroscience</p>
+        <p className="text-xl text-zinc-400 mb-3">Kyungri Kim · Ph.D. in Neuroscience</p>
         <p className="text-zinc-500 max-w-xl leading-relaxed">
           연구하면서 만든 것들을 올려두는 곳입니다.
           주로 대학원생에게 필요한 도구들을 만들고 있어요.
         </p>
-        <p className="text-amber-400 font-mono text-sm mt-4 italic">
+        <p className="text-amber-400 font-mono text-sm mt-2 italic">
           Ruptis Claustris, Scientia Omnibus
           <span className="text-amber-500 not-italic ml-2">— 닫힌 벽을 부수고, 지식을 모두에게</span>
         </p>
-        <div className="flex gap-4 mt-6">
+        <div className="flex gap-4 mt-3">
           <a
             href="mailto:kby930@gmail.com"
             className="text-sm text-zinc-500 hover:text-violet-400 transition-colors font-mono"
@@ -170,7 +170,7 @@ export default function Home() {
       </section>
 
       {/* Divider */}
-      <div className="h-px bg-zinc-800 mb-16" />
+      <div className="h-px bg-zinc-800 mb-8" />
 
       {/* Stair Widget */}
       <StairWidget />
@@ -179,11 +179,11 @@ export default function Home() {
       <RecentCommits />
 
       {/* Divider */}
-      <div className="h-px bg-zinc-800 mb-16" />
+      <div className="h-px bg-zinc-800 mb-8" />
 
       {/* Tools */}
       <section>
-        <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-8">
+        <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4">
           Tools
         </h2>
         <div className="grid gap-4">
@@ -235,7 +235,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-24 pt-8 border-t border-zinc-800">
+      <footer className="mt-12 pt-6 border-t border-zinc-800">
         <p className="text-zinc-600 text-sm font-mono">
           © {new Date().getFullYear()} Hellomymouse
         </p>
