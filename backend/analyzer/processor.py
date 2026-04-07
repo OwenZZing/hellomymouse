@@ -213,10 +213,22 @@ class AnalysisPipeline:
         finally:
             _stop.set()
 
-        try:
-            result = _parse_json_response(response)
-        except json.JSONDecodeError as e:
-            raise RuntimeError(f'AI 응답 파싱 실패: {e}\n\n응답 앞부분:\n{response[:300]}')
+        # Try parsing; if it fails, retry once with a shorter prompt
+        for attempt in range(2):
+            try:
+                result = _parse_json_response(response)
+                break
+            except json.JSONDecodeError:
+                if attempt == 0:
+                    self._progress('JSON 파싱 실패 — 자동 재시도 중...', 72)
+                    _stop2 = threading.Event()
+                    threading.Thread(target=_keepalive, daemon=True).start()
+                    try:
+                        response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=16000)
+                    finally:
+                        _stop2.set()
+                else:
+                    raise RuntimeError('AI가 올바른 형식으로 응답하지 않았습니다. 논문 수를 줄이거나 Claude Sonnet을 사용해보세요.')
 
         self._progress('Stage 2A 완료 — 체크리스트·배경지식·로드맵 생성 중...', 90)
 
