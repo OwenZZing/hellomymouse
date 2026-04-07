@@ -218,5 +218,41 @@ async def download(job_id: str):
     )
 
 
+# ── Widget (계단 + 버튼) ──────────────────────────────────────
+
+from datetime import datetime, timezone
+
+widget_state = {
+    "stairs": 0,
+    "button_count": 0,
+    "last_updated": "",
+}
+
+
+@app.get("/api/widget")
+async def get_widget():
+    return widget_state
+
+
+class StairsBody(BaseModel):
+    count: int
+    secret: str = ""
+
+
+@app.post("/api/widget/stairs")
+async def update_stairs(body: StairsBody):
+    if body.secret != os.environ.get("WIDGET_SECRET", "hellomymouse"):
+        raise HTTPException(403, "비밀번호가 틀렸습니다.")
+    widget_state["stairs"] = body.count
+    widget_state["last_updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return widget_state
+
+
+@app.post("/api/widget/button")
+async def press_button():
+    widget_state["button_count"] += 1
+    return {"button_count": widget_state["button_count"]}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

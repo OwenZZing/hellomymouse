@@ -1,4 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+// ── Tools ─────────────────────────────────────────────────────
 
 const tools = [
   {
@@ -25,11 +32,115 @@ const tools = [
   },
 ];
 
+// ── Recent Commits ────────────────────────────────────────────
+
+interface Commit {
+  sha: string;
+  commit: { message: string; author: { date: string } };
+}
+
+function timeAgo(dateStr: string) {
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  if (diff < 60) return `${Math.floor(diff)}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function RecentCommits() {
+  const [commits, setCommits] = useState<Commit[]>([]);
+
+  useEffect(() => {
+    fetch("https://api.github.com/repos/OwenZZing/hellomymouse/commits?per_page=5")
+      .then((r) => r.json())
+      .then(setCommits)
+      .catch(() => {});
+  }, []);
+
+  if (!commits.length) return null;
+
+  return (
+    <div className="mb-16">
+      <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4">
+        Recent commits
+      </p>
+      <div className="space-y-2">
+        {commits.map((c) => (
+          <div key={c.sha} className="flex items-baseline gap-3 font-mono text-xs">
+            <span className="text-zinc-600 w-16 shrink-0">
+              {timeAgo(c.commit.author.date)}
+            </span>
+            <span className="text-violet-500">hypothesis-maker</span>
+            <span className="text-zinc-500 truncate">
+              {c.commit.message.split("\n")[0]}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Stair Widget ──────────────────────────────────────────────
+
+function StairWidget() {
+  const [stairs, setStairs] = useState<number | null>(null);
+  const [buttonCount, setButtonCount] = useState(0);
+  const [pressed, setPressed] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/widget`)
+      .then((r) => r.json())
+      .then((d) => {
+        setStairs(d.stairs);
+        setButtonCount(d.button_count);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handlePress = async () => {
+    if (pressed) return;
+    setPressed(true);
+    setButtonCount((n) => n + 1);
+    await fetch(`${API_URL}/api/widget/button`, { method: "POST" }).catch(() => {});
+  };
+
+  return (
+    <div className="mb-16 p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-6 flex-wrap">
+      <div className="flex items-center gap-4">
+        <span className="text-4xl">🐭</span>
+        <div>
+          <p className="text-xs font-mono text-zinc-500 mb-1">오늘 오른 계단</p>
+          <p className="text-2xl font-bold text-zinc-100">
+            {stairs === null ? "..." : `${stairs}층`}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          onClick={handlePress}
+          disabled={pressed}
+          className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            pressed
+              ? "bg-violet-500/20 text-violet-400 border border-violet-500/30 cursor-default"
+              : "bg-zinc-800 hover:bg-violet-500/20 hover:border-violet-500/30 text-zinc-300 hover:text-violet-300 border border-zinc-700"
+          }`}
+        >
+          {pressed ? "눌렀어요 ✓" : "박사님 운동하세요! 🔔"}
+        </button>
+        <p className="text-xs text-zinc-600 font-mono">{buttonCount}명이 눌렀어요</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────
+
 export default function Home() {
   return (
     <main className="max-w-4xl mx-auto px-6 py-24">
       {/* Hero */}
-      <section className="mb-24">
+      <section className="mb-16">
         <p className="text-violet-400 font-mono text-sm mb-4 tracking-widest uppercase">
           hellomymouse.com
         </p>
@@ -59,6 +170,15 @@ export default function Home() {
           </a>
         </div>
       </section>
+
+      {/* Divider */}
+      <div className="h-px bg-zinc-800 mb-16" />
+
+      {/* Stair Widget */}
+      <StairWidget />
+
+      {/* Recent Commits */}
+      <RecentCommits />
 
       {/* Divider */}
       <div className="h-px bg-zinc-800 mb-16" />
