@@ -35,8 +35,15 @@ class APIClient:
     def _init_gemini(self):
         try:
             import google.generativeai as genai
+            from google.generativeai.types import HarmCategory, HarmBlockThreshold
             genai.configure(api_key=self.api_key)
             self._genai = genai
+            self._safety_settings = {
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
             self._client = genai.GenerativeModel(self.model)
         except ImportError:
             raise ImportError('google-generativeai not installed. Run: pip install google-generativeai')
@@ -125,7 +132,14 @@ class APIClient:
             response = self._client.generate_content(
                 full_prompt,
                 generation_config={'max_output_tokens': max_tokens},
+                safety_settings=getattr(self, '_safety_settings', None),
             )
+            # finish_reason 2 = SAFETY block
+            if not response.candidates:
+                raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. 다른 모델을 사용해보세요.')
+            candidate = response.candidates[0]
+            if candidate.finish_reason == 2:
+                raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. gemini-2.0-flash를 사용해보세요.')
             return response.text
         except Exception as e:
             err = str(e).lower()
