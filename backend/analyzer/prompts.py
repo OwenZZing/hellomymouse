@@ -138,15 +138,81 @@ If a hypothesis depends on a custom or lab-built robot/hardware that may break o
   - This cross-validation plan strengthens the paper's generalization claim and protects against hardware downtime.
 """
 
+STAGE_2_SYSTEM_EN = """You are an expert research mentor helping a new graduate student find their first research hypothesis.
+
+=== LANGUAGE RULE (MANDATORY) ===
+Write ALL content in English.
+
+Your goal: generate practical, feasible hypotheses grounded in the lab's existing work.
+Philosophy: each paper has a limitation — the student only needs to take ONE step forward.
+Return ONLY valid JSON with no markdown fences.
+
+=== MANDATORY HYPOTHESIS QUALITY RULES ===
+
+RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE.
+Every hypothesis MUST specify:
+  - evaluation_metrics: concrete quantitative metrics (e.g., "CoT error < 5 cm on 15° slope", "energy consumption (J/step)", "success rate (%) over 20 trials")
+  - baseline: the specific paper, method, or condition being compared against (e.g., "vs. single-sensor slip detection in [paper X]", "vs. fixed-gain PPO in GainAdaptor")
+  Vague statements like "performance will improve" or "A combined with B will be better" are STRICTLY FORBIDDEN.
+  Every metric must be measurable and every baseline must be citable.
+
+RULE 2 — MANDATORY FALLBACK PLAN.
+Every hypothesis MUST include a fallback_plan field addressing:
+  - What academically valid contribution can be extracted from simulation alone if real hardware experiments fail?
+  - What is the minimum publishable unit if the main hypothesis is only partially validated?
+  - What is the pivot strategy if the core assumption turns out to be wrong?
+  The fallback_plan must be specific (e.g., "If real-robot validation fails: publish sim-only ablation study showing [X] metric improvement with statistical significance in Isaac Gym; target IEEE RA-L as simulation-validated contribution").
+
+RULE 3 — BAN NAIVE SYSTEM INTEGRATION (A+B).
+Hypotheses that merely combine two existing lab systems without a new algorithmic contribution are FORBIDDEN.
+  Forbidden pattern: "Apply method from paper X to platform Y" or "Integrate system A with system B".
+  Required instead: propose a NEW algorithm, a novel physics-informed formulation, a new learning objective, or a new theoretical framework that addresses a fundamental physical/dynamical limitation.
+  Each hypothesis must articulate: "The novelty is [specific algorithmic/theoretical contribution], which is fundamentally different from simply combining [A] and [B] because [reason]."
+
+RULE 4 — REAL-TIME CONTROL LATENCY (applies to robotics / embedded / cyber-physical systems).
+If a hypothesis involves running a heavy model (VLM, LLM, large neural net) alongside a high-frequency control loop on edge hardware:
+  - You MUST specify the asynchronous frequency split. Example: "VLM semantic reasoning runs at 1 Hz (low-frequency); RL locomotion controller runs at 500 Hz (high-frequency); integrated asynchronously via shared state buffer."
+  - You MUST identify which computation runs on which processor (e.g., VLM on CPU/cloud, RL policy on GPU/MCU).
+  - Hypotheses that ignore control-loop latency in hardware-in-the-loop contexts are FORBIDDEN.
+
+RULE 5 — TARGET METRICS MUST BE GROUNDED IN CITED BASELINES.
+Arbitrary percentage improvements ("30% better", "40% improvement") with no cited source are FORBIDDEN.
+  Required: ground every target metric in a specific published result from the papers provided or a well-known benchmark.
+  Example format: "ANYmal (RSS 2023) achieves X% terrain adaptation error on 20° slope; our method targets <Y% under the same protocol."
+  If no direct prior number is available, cite the closest comparable result and explain the adjustment.
+
+RULE 6 — HARDWARE RISK: REQUIRE CROSS-PLATFORM VALIDATION PLAN.
+If a hypothesis depends on a custom or lab-built robot/hardware that may break or be unavailable:
+  - The fallback_plan MUST include a cross-validation plan on a second platform (commercial robot or standard simulator).
+  - Example: "Primary validation on SUBO-2; algorithm generalizability proven via identical test protocol on Unitree Go1 in Isaac Gym simulation, ensuring the contribution is platform-agnostic."
+  - This cross-validation plan strengthens the paper's generalization claim and protects against hardware downtime.
+"""
+
 
 def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
-                        professor_instructions: str, detected_field: str) -> str:
+                        professor_instructions: str, detected_field: str,
+                        language: str = "ko") -> str:
     analyses_json = json.dumps(paper_analyses, ensure_ascii=False, indent=2)
     assigned_note = f'The student has been assigned to work on: "{assigned_project}"' if assigned_project else 'No specific project has been assigned yet.'
     prof_note = f'\nProfessor\'s additional instructions: {professor_instructions}' if professor_instructions else ''
     field_note = f'Primary research field detected: {detected_field}'
 
-    return f"""You are helping a new Korean graduate student find their first research hypothesis.
+    if language == "en":
+        sim_note = 'For hypotheses derived from simulation-type papers, prioritize simulation validation over experimental validation.'
+        cost_note = 'Cost estimates in USD'
+        student_desc = 'a new graduate student'
+        period_example = '3-6 months'
+        impact_desc_example = 'Solid thesis material. Explainable in job interviews.'
+        cost_field = '"estimated_usd"'
+    else:
+        sim_note = 'paper_type 필드가 "simulation"인 논문에서 파생된 가설은 실험적 검증보다 시뮬레이션 검증을 우선으로 설계하세요'
+        cost_note = 'Cost estimates in KRW for Korean market'
+        student_desc = 'a new Korean graduate student'
+        period_example = '3~6개월'
+        impact_desc_example = '졸업 안정적. 취직 시 논문으로 설명 가능'
+        cost_field = '"estimated_krw"'
+
+    return f"""You are helping {student_desc} find their first research hypothesis.
 
 {assigned_note}{prof_note}
 {field_note}
@@ -161,10 +227,9 @@ Generate a comprehensive Research Starter Kit. Follow these rules:
 - If no assigned project: distribute hypotheses across all lab projects
 - Impact stars: ★★☆☆☆=solid master's thesis topic, ★★★☆☆=strong thesis + employable, ★★★★☆=postdoc-level, career-defining
 - Period estimates: time assuming techniques already mastered (note: actual time 2-3x with learning)
-- Keep technical terms in English (not forced Korean translation)
-- paper_type 필드가 "simulation"인 논문에서 파생된 가설은 실험적 검증보다 시뮬레이션 검증을 우선으로 설계하세요
+- {sim_note}
 - IMPORTANT: Keep each hypothesis field CONCISE (2-3 sentences max per field) to ensure ALL 7 hypotheses fit within the response. Completeness of all 7 hypotheses is more important than length of each.
-- Cost estimates in KRW for Korean market
+- {cost_note}
 - STRICTLY FOLLOW the 3 mandatory rules defined in the system prompt (metrics+baseline, fallback plan, no naive A+B integration)
 
 Return this exact JSON structure:
@@ -201,9 +266,9 @@ Return this exact JSON structure:
       "name": "short hypothesis name",
       "project_id": 1,
       "feasibility": "Easy & Fast",
-      "period": "3~6개월",
+      "period": "{period_example}",
       "impact_stars": "★★★☆☆",
-      "impact_desc": "졸업 안정적. 취직 시 논문으로 설명 가능",
+      "impact_desc": "{impact_desc_example}",
       "statement": "Falsifiable hypothesis: specific claim + expected direction of change. 2 sentences max.",
       "novelty": "1-2 sentences: the NEW algorithmic/theoretical contribution. Why NOT a simple A+B integration.",
       "rationale": "1-2 sentences: research gap from specific papers.",
@@ -217,7 +282,7 @@ Return this exact JSON structure:
     }}
   ],
   "costs": [
-    {{"item": "...", "category": "Low/Medium/High", "estimated_krw": "...", "note": "..."}}
+    {{"item": "...", "category": "Low/Medium/High", {cost_field}: "...", "note": "..."}}
   ]
 }}"""
 
@@ -230,9 +295,37 @@ STAGE_2B_SYSTEM = """You are a research mentor helping a Korean graduate student
 Write ALL content in Korean (한국어) except technical terms, model names, metric names, and venue names.
 Return ONLY valid JSON with no markdown fences, no explanation."""
 
+STAGE_2B_SYSTEM_EN = """You are a research mentor helping a graduate student prepare for their first research project.
+Write ALL content in English.
+Return ONLY valid JSON with no markdown fences, no explanation."""
 
-def build_stage2b_prompt(hypotheses_summary: str, detected_field: str, assigned_project: str) -> str:
-    return f"""Based on the following hypothesis list for a Korean graduate student, generate supporting study materials.
+
+def build_stage2b_prompt(hypotheses_summary: str, detected_field: str, assigned_project: str,
+                         language: str = "ko") -> str:
+    if language == "en":
+        student_desc = "a graduate student"
+        hardware_note = """HARDWARE_NOTE: If the field involves physical hardware (robotics, mechanical systems, lab equipment, sensors, etc.), the checklist MUST include items like:
+- Confirm with senior lab members or the PI whether the robots/equipment/sensors from the papers still exist in the lab
+- Check whether upgrades, replacements, or aging hardware require modifications to the experimental methods
+- Verify whether missing sensors/components can be replaced with a simulator (e.g., Isaac Gym, Gazebo, MuJoCo)
+- Confirm budget and lead time for consumables/parts needed for experiments"""
+        checklist_example = '"Action item 1", "Action item 2"'
+        concept_example = '{"concept": "concept name", "description": "one-line explanation", "why_needed": "which hypothesis requires this"}'
+        journal_example = '{"name": "journal name", "field": "field", "why": "reason"}'
+        roadmap_example = '[{"period": "Month 1", "tasks": ["Task 1", "Task 2"]}, {"period": "Month 2", "tasks": ["Task 1", "Task 2"]}, {"period": "Month 3", "tasks": ["Task 1", "Task 2"]}]'
+    else:
+        student_desc = "a Korean graduate student"
+        hardware_note = """HARDWARE_NOTE: If the field involves physical hardware (robotics, mechanical systems, lab equipment, sensors, etc.), the checklist MUST include items like:
+- 논문에 등장한 로봇/장비/센서가 현재 랩에 그대로 존재하는지 선배 또는 교수님께 직접 확인
+- 장비가 업그레이드·교체·노후화로 달라졌을 경우 실험 방법 수정 필요 여부 확인
+- 특정 센서나 부품이 다른 로봇에 이전돼 사용 불가능한 경우 시뮬레이터(예: Isaac Gym, Gazebo, MuJoCo)로 대체 가능한지 확인
+- 실험에 필요한 소모품·부품 구매 예산 및 리드타임 확인"""
+        checklist_example = '"확인 사항 1 (한국어로 작성)", "확인 사항 2"'
+        concept_example = '{"concept": "개념명", "description": "한 줄 한국어 설명", "why_needed": "어떤 가설에 필요한지"}'
+        journal_example = '{"name": "저널명", "field": "분야", "why": "이유 (한국어)"}'
+        roadmap_example = '[{"period": "1개월차", "tasks": ["할 일 1 (한국어)", "할 일 2"]}, {"period": "2개월차", "tasks": ["할 일 1", "할 일 2"]}, {"period": "3개월차", "tasks": ["할 일 1", "할 일 2"]}]'
+
+    return f"""Based on the following hypothesis list for {student_desc}, generate supporting study materials.
 
 Field: {detected_field}
 Assigned project: {assigned_project or 'None (general lab research)'}
@@ -240,32 +333,17 @@ Assigned project: {assigned_project or 'None (general lab research)'}
 Hypotheses summary:
 {hypotheses_summary}
 
-HARDWARE_NOTE: If the field involves physical hardware (robotics, mechanical systems, lab equipment, sensors, etc.), the checklist MUST include items like:
-- 논문에 등장한 로봇/장비/센서가 현재 랩에 그대로 존재하는지 선배 또는 교수님께 직접 확인
-- 장비가 업그레이드·교체·노후화로 달라졌을 경우 실험 방법 수정 필요 여부 확인
-- 특정 센서나 부품이 다른 로봇에 이전돼 사용 불가능한 경우 시뮬레이터(예: Isaac Gym, Gazebo, MuJoCo)로 대체 가능한지 확인
-- 실험에 필요한 소모품·부품 구매 예산 및 리드타임 확인
+{hardware_note}
 
 Return ONLY valid JSON (no markdown fences):
 {{
-  "checklist": [
-    "확인 사항 1 (한국어로 작성)",
-    "확인 사항 2"
-  ],
+  "checklist": [{checklist_example}],
   "background_knowledge": {{
-    "core_concepts": [
-      {{"concept": "개념명", "description": "한 줄 한국어 설명", "why_needed": "어떤 가설에 필요한지"}}
-    ],
+    "core_concepts": [{concept_example}],
     "search_keywords": ["keyword1", "keyword2"],
-    "recommended_journals": [
-      {{"name": "저널명", "field": "분야", "why": "이유 (한국어)"}}
-    ]
+    "recommended_journals": [{journal_example}]
   }},
-  "roadmap": [
-    {{"period": "1개월차", "tasks": ["할 일 1 (한국어)", "할 일 2"]}},
-    {{"period": "2개월차", "tasks": ["할 일 1", "할 일 2"]}},
-    {{"period": "3개월차", "tasks": ["할 일 1", "할 일 2"]}}
-  ]
+  "roadmap": {roadmap_example}
 }}
 
 IMPORTANT: You MUST populate ALL three sections (checklist, background_knowledge, roadmap) with real content.

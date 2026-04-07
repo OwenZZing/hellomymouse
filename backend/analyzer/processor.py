@@ -14,8 +14,8 @@ from analyzer.api_client import APIClient
 from analyzer.prompts import (
     STAGE_0_SYSTEM, build_stage0_prompt,
     STAGE_1_SYSTEM, build_stage1_prompt,
-    STAGE_2_SYSTEM, build_stage2_prompt,
-    STAGE_2B_SYSTEM, build_stage2b_prompt,
+    STAGE_2_SYSTEM, STAGE_2_SYSTEM_EN, build_stage2_prompt,
+    STAGE_2B_SYSTEM, STAGE_2B_SYSTEM_EN, build_stage2b_prompt,
 )
 
 ProgressCallback = Callable[[str, int], None]
@@ -200,7 +200,7 @@ class AnalysisPipeline:
     # Stage 2: Synthesis + report generation
     # ──────────────────────────────────────────────
     def run_stage2(self, paper_analyses: list[dict], assigned_project: str,
-                   professor_instructions: str) -> dict:
+                   professor_instructions: str, language: str = "ko") -> dict:
         """Synthesize all analyses into final report data."""
         self._progress('Stage 2: 가설 및 리포트 생성 중... (1-3분 소요)', 70)
 
@@ -226,10 +226,11 @@ class AnalysisPipeline:
         fields = [p.get('field', '') for p in paper_analyses if p.get('field')]
         detected_field = max(set(fields), key=fields.count) if fields else 'STEM research'
 
+        system2 = STAGE_2_SYSTEM_EN if language == "en" else STAGE_2_SYSTEM
         prompt = build_stage2_prompt(paper_analyses, assigned_project,
-                                     professor_instructions, detected_field)
+                                     professor_instructions, detected_field, language)
         try:
-            response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=16000)
+            response = self.api.call(prompt, system2, max_tokens=16000)
         finally:
             _stop.set()
 
@@ -261,8 +262,9 @@ class AnalysisPipeline:
                 for h in result.get('hypotheses', [])
             )
             self._progress('Stage 2B: 체크리스트·배경지식·로드맵 생성 중...', 91)
-            prompt2b = build_stage2b_prompt(hypo_summary, detected_field, assigned_project)
-            response2b = self.api.call(prompt2b, STAGE_2B_SYSTEM, max_tokens=8192)
+            system2b = STAGE_2B_SYSTEM_EN if language == "en" else STAGE_2B_SYSTEM
+            prompt2b = build_stage2b_prompt(hypo_summary, detected_field, assigned_project, language)
+            response2b = self.api.call(prompt2b, system2b, max_tokens=8192)
             result2b = _parse_json_response(response2b)
             checklist = result2b.get('checklist', [])
             bg = result2b.get('background_knowledge', {})
@@ -293,6 +295,7 @@ class AnalysisPipeline:
     # ──────────────────────────────────────────────
     def run_full_analysis(self, lab_pdf_paths: list[str], ref_pdf_paths: list[str],
                           assigned_project: str = '',
-                          professor_instructions: str = '') -> dict:
+                          professor_instructions: str = '',
+                          language: str = 'ko') -> dict:
         paper_analyses = self.run_stage1(lab_pdf_paths, ref_pdf_paths, assigned_project)
-        return self.run_stage2(paper_analyses, assigned_project, professor_instructions)
+        return self.run_stage2(paper_analyses, assigned_project, professor_instructions, language)

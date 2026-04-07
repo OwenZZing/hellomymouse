@@ -34,21 +34,19 @@ class APIClient:
 
     def _init_gemini(self):
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            self._genai = genai
+            from google import genai
+            from google.genai import types
+            self._client = genai.Client(api_key=self.api_key)
+            self._genai_types = types
             self._safety_settings = [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_NONE'),
+                types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_NONE'),
+                types.SafetySetting(category='HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold='BLOCK_NONE'),
+                types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_NONE'),
+                types.SafetySetting(category='HARM_CATEGORY_CIVIC_INTEGRITY', threshold='BLOCK_NONE'),
             ]
-            self._client = genai.GenerativeModel(
-                self.model,
-                safety_settings=self._safety_settings,
-            )
         except ImportError:
-            raise ImportError('google-generativeai not installed. Run: pip install google-generativeai')
+            raise ImportError('google-genai not installed. Run: pip install google-genai')
 
     def upload_files_for_gemini(self, file_paths: list) -> list:
         """Upload PDF files to Gemini File API. Returns list of file objects."""
@@ -57,7 +55,7 @@ class APIClient:
         uploaded = []
         for path in file_paths:
             try:
-                f = self._genai.upload_file(path=path)
+                f = self._client.files.upload(file=path)
                 uploaded.append(f)
             except Exception as e:
                 raise RuntimeError(f'Gemini 파일 업로드 실패 ({path}): {e}')
@@ -153,20 +151,24 @@ class APIClient:
     def _call_gemini_with_files(self, user_prompt: str, system_prompt: str,
                                 files: list, max_tokens: int) -> str:
         try:
+            types = self._genai_types
             parts = []
             if system_prompt:
                 parts.append(f"[SYSTEM]\n{system_prompt}\n\n[USER]\n")
             parts.extend(files)
             parts.append(user_prompt)
-            response = self._client.generate_content(
-                parts,
-                generation_config={'max_output_tokens': max_tokens},
-                safety_settings=self._safety_settings,
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=parts,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_tokens,
+                    safety_settings=self._safety_settings,
+                ),
             )
             if not response.candidates:
                 raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
             candidate = response.candidates[0]
-            if candidate.finish_reason == 2:
+            if candidate.finish_reason and candidate.finish_reason.name == 'SAFETY':
                 raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
             return response.text
         except RuntimeError:
@@ -186,18 +188,21 @@ class APIClient:
 
     def _call_gemini(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
         try:
+            types = self._genai_types
             academic_prefix = "You are an academic research assistant. This is a scientific analysis task for academic purposes only.\n\n"
             full_prompt = f'{academic_prefix}{system_prompt}\n\n{user_prompt}' if system_prompt else f'{academic_prefix}{user_prompt}'
-            response = self._client.generate_content(
-                full_prompt,
-                generation_config={'max_output_tokens': max_tokens},
-                safety_settings=self._safety_settings,
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_tokens,
+                    safety_settings=self._safety_settings,
+                ),
             )
-            # finish_reason 2 = SAFETY block
             if not response.candidates:
                 raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
             candidate = response.candidates[0]
-            if candidate.finish_reason == 2:
+            if candidate.finish_reason and candidate.finish_reason.name == 'SAFETY':
                 raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
             return response.text
         except RuntimeError:

@@ -5,34 +5,30 @@ import { useEffect, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-// ── Tools ─────────────────────────────────────────────────────
-
 const tools = [
   {
     slug: "hypothesis-maker",
     name: "Hypothesis Maker",
     description:
-      "연구실 논문 PDF를 업로드하면 AI가 분석해 Research Starter Kit (Word 문서)를 생성합니다. 신입 대학원생을 위한 첫 번째 연구 가이드.",
-    tags: ["Claude / GPT / Gemini", "PDF 분석", "가설 생성"],
+      "Upload your lab's research PDFs and let AI analyze them to generate a Research Starter Kit (Word document). Your first research guide as a new grad student.",
+    tags: ["Claude / GPT / Gemini", "PDF Analysis", "Hypothesis Generation"],
     status: "live",
   },
   {
     slug: null,
     name: "Coming Soon",
-    description: "다음 프로젝트를 준비 중입니다.",
+    description: "More tools in the works.",
     tags: [],
     status: "soon",
   },
   {
     slug: null,
     name: "Coming Soon",
-    description: "다음 프로젝트를 준비 중입니다.",
+    description: "More tools in the works.",
     tags: [],
     status: "soon",
   },
 ];
-
-// ── Recent Commits ────────────────────────────────────────────
 
 interface Commit {
   sha: string;
@@ -67,21 +63,15 @@ function RecentCommits() {
       <div className="space-y-2">
         {commits.map((c) => (
           <div key={c.sha} className="flex items-baseline gap-3 font-mono text-xs">
-            <span className="text-zinc-600 w-16 shrink-0">
-              {timeAgo(c.commit.author.date)}
-            </span>
+            <span className="text-zinc-600 w-16 shrink-0">{timeAgo(c.commit.author.date)}</span>
             <span className="text-violet-500">hypothesis-maker</span>
-            <span className="text-zinc-500 truncate">
-              {c.commit.message.split("\n")[0]}
-            </span>
+            <span className="text-zinc-500 truncate">{c.commit.message.split("\n")[0]}</span>
           </div>
         ))}
       </div>
     </div>
   );
 }
-
-// ── Stair Widget ──────────────────────────────────────────────
 
 function StairWidget() {
   const [stairs, setStairs] = useState<number | null>(null);
@@ -91,10 +81,7 @@ function StairWidget() {
   useEffect(() => {
     fetch(`${API_URL}/api/widget`)
       .then((r) => r.json())
-      .then((d) => {
-        setStairs(d.stairs);
-        setButtonCount(d.button_count);
-      })
+      .then((d) => { setStairs(d.stairs); setButtonCount(d.button_count); })
       .catch(() => {});
   }, []);
 
@@ -108,7 +95,10 @@ function StairWidget() {
   return (
     <div className="mb-10 px-4 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3 flex-wrap">
       <p className="text-sm text-zinc-400 font-mono">
-        🐭 오늘 오른 계단 <span className="text-zinc-100 font-bold">{stairs === null ? "-" : stairs === 0 ? "아직 0층 🥲" : `${stairs}층`}</span>
+        🐭 Floors climbed today{" "}
+        <span className="text-zinc-100 font-bold">
+          {stairs === null ? "-" : stairs === 0 ? "still 0 🥲" : `${stairs} floors`}
+        </span>
       </p>
       <div className="flex items-center gap-2">
         <button
@@ -120,17 +110,15 @@ function StairWidget() {
               : "text-zinc-500 hover:text-violet-400 border border-zinc-700 hover:border-violet-500/40"
           }`}
         >
-          {pressed ? "✓ 눌렀어요" : "박사님 운동하세요! 🔔"}
+          {pressed ? "✓ Cheered!" : "Go exercise, doc! 🔔"}
         </button>
-        <span className="text-xs text-zinc-600 font-mono">{buttonCount}명</span>
+        <span className="text-xs text-zinc-600 font-mono">{buttonCount} cheers</span>
       </div>
     </div>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────
-
-export default function Home() {
+export default function HomeEN() {
   return (
     <main className="max-w-4xl mx-auto px-6 py-6">
       {/* Hero */}
@@ -140,23 +128,21 @@ export default function Home() {
             hellomymouse.com
           </p>
           <Link
-            href="/en"
+            href="/"
             className="text-xs font-mono text-zinc-600 hover:text-violet-400 transition-colors border border-zinc-800 hover:border-violet-500/40 px-2 py-1 rounded"
           >
-            English
+            한국어
           </Link>
         </div>
-        <h1 className="text-5xl font-bold text-zinc-100 mb-1 tracking-tight">
-          Hellomymouse
-        </h1>
+        <h1 className="text-5xl font-bold text-zinc-100 mb-1 tracking-tight">Hellomymouse</h1>
         <p className="text-xl text-zinc-400 mb-2">Kyungri Kim · Ph.D. in Neuroscience</p>
         <p className="text-zinc-500 max-w-xl leading-relaxed">
-          연구하면서 만든 것들을 올려두는 곳입니다.
-          주로 대학원생에게 필요한 도구들을 만들고 있어요.
+          A place for tools I build while doing research.
+          Mostly tools for grad students who need them.
         </p>
         <p className="text-amber-400 font-mono text-sm mt-1 italic">
           Ruptis Claustris, Scientia Omnibus
-          <span className="text-amber-500 not-italic ml-2">— 닫힌 벽을 부수고, 지식을 모두에게</span>
+          <span className="text-amber-500 not-italic ml-2">— Breaking walls, knowledge for all</span>
         </p>
         <div className="flex gap-4 mt-2">
           <a
@@ -177,29 +163,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider */}
       <div className="h-px bg-zinc-800 mb-4" />
 
-      {/* Stair Widget */}
       <StairWidget />
-
-      {/* Recent Commits */}
       <RecentCommits />
 
-      {/* Divider */}
       <div className="h-px bg-zinc-800 mb-4" />
 
       {/* Tools */}
       <section>
-        <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-3">
-          Tools
-        </h2>
+        <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-3">Tools</h2>
         <div className="grid gap-4">
           {tools.map((tool, i) =>
             tool.status === "live" && tool.slug ? (
               <Link
                 key={i}
-                href={`/tools/${tool.slug}`}
+                href={`/en/tools/${tool.slug}`}
                 className="group block p-6 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:border-violet-500/50 hover:bg-zinc-900 transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">
@@ -210,15 +189,10 @@ export default function Home() {
                     live
                   </span>
                 </div>
-                <p className="text-zinc-400 text-sm leading-relaxed mb-4">
-                  {tool.description}
-                </p>
+                <p className="text-zinc-400 text-sm leading-relaxed mb-4">{tool.description}</p>
                 <div className="flex gap-2 flex-wrap">
                   {tool.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs px-2 py-1 rounded-md bg-zinc-800 text-zinc-500"
-                    >
+                    <span key={tag} className="text-xs px-2 py-1 rounded-md bg-zinc-800 text-zinc-500">
                       {tag}
                     </span>
                   ))}
@@ -242,7 +216,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="mt-6 pt-4 border-t border-zinc-800">
         <p className="text-zinc-600 text-sm font-mono">
           © {new Date().getFullYear()} Hellomymouse

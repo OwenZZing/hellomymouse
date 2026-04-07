@@ -116,6 +116,7 @@ class AnalyzeBody(BaseModel):
     assigned_project: str = ""
     professor_name: str = ""
     professor_instructions: str = ""
+    language: str = "ko"
 
 
 @app.post("/api/analyze")
@@ -150,6 +151,7 @@ async def start_analysis(body: AnalyzeBody):
                 session.get("ref_paths", []),
                 body.assigned_project,
                 body.professor_instructions,
+                body.language,
             )
 
             prof = body.professor_name.strip()
