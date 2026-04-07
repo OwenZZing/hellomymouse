@@ -41,6 +41,23 @@ export default function Home() {
           연구하면서 만든 것들을 올려두는 곳입니다.
           주로 대학원생에게 필요한 도구들을 만들고 있어요.
         </p>
+        <div className="flex gap-4 mt-6">
+          <a
+            href="mailto:kby930@gmail.com"
+            className="text-sm text-zinc-500 hover:text-violet-400 transition-colors font-mono"
+          >
+            kby930@gmail.com
+          </a>
+          <span className="text-zinc-700">·</span>
+          <a
+            href="https://www.threads.net/@hellmomymouse"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-zinc-500 hover:text-violet-400 transition-colors font-mono"
+          >
+            @hellmomymouse
+          </a>
+        </div>
       </section>
 
       {/* Divider */}
