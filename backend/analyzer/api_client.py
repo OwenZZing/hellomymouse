@@ -129,6 +129,9 @@ class APIClient:
             return response.text
         except Exception as e:
             err = str(e).lower()
-            if 'api_key' in err or 'authentication' in err or 'invalid' in err:
-                raise ValueError('Gemini API 키가 올바르지 않습니다.')
+            if 'api_key' in err or 'authentication' in err or 'api key not valid' in err or 'invalid api key' in err:
+                raise ValueError(
+                    'Gemini API 키가 올바르지 않습니다. '
+                    'aistudio.google.com → Get API Key에서 발급한 키인지 확인하세요.'
+                )
             raise RuntimeError(f'Gemini API 오류: {e}')
