@@ -48,7 +48,7 @@ type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
 const MODELS: Record<Provider, string[]> = {
   claude: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
-  gemini: ["gemini-2.5-flash", "gemini-2.5-pro"],
+  gemini: ["gemini-2.5-flash"],
 };
 
 const PROVIDER_LABELS: Record<Provider, string> = {
