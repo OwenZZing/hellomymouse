@@ -130,11 +130,12 @@ class APIClient:
 
     def _call_gemini(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
         try:
-            full_prompt = f'{system_prompt}\n\n{user_prompt}' if system_prompt else user_prompt
+            academic_prefix = "You are an academic research assistant. This is a scientific analysis task for academic purposes only.\n\n"
+            full_prompt = f'{academic_prefix}{system_prompt}\n\n{user_prompt}' if system_prompt else f'{academic_prefix}{user_prompt}'
             response = self._client.generate_content(
                 full_prompt,
                 generation_config={'max_output_tokens': max_tokens},
-                safety_settings=getattr(self, '_safety_settings', None),
+                safety_settings=self._safety_settings,
             )
             # finish_reason 2 = SAFETY block
             if not response.candidates:
@@ -143,6 +144,10 @@ class APIClient:
             if candidate.finish_reason == 2:
                 raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
             return response.text
+        except RuntimeError:
+            raise
+        except ValueError:
+            raise
         except Exception as e:
             err = str(e).lower()
             if 'api_key' in err or 'authentication' in err or 'api key not valid' in err or 'invalid api key' in err:
@@ -150,4 +155,6 @@ class APIClient:
                     'Gemini API 키가 올바르지 않습니다. '
                     'aistudio.google.com → Get API Key에서 발급한 키인지 확인하세요.'
                 )
+            if 'safety' in err or 'block' in err or 'recitation' in err:
+                raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
             raise RuntimeError(f'Gemini API 오류: {e}')
