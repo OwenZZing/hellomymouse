@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from "react";
 // ── Star background ───────────────────────────────────────────
 
 const STARS = [
-  { name: "@kseo_nkook", x: 82, y: 12, size: 11, opacity: 0.18 },
+  { name: "@kseo_nkook", x: 82, y: 12, size: 12, opacity: 0.45 },
 ];
 
 function StarBackground() {
@@ -198,6 +198,7 @@ export default function HypothesisMaker() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [labName, setLabName] = useState("");
   const [assignedProject, setAssignedProject] = useState("");
+  const [profName, setProfName] = useState("");
   const [profInstructions, setProfInstructions] = useState("");
   const [jobId, setJobId] = useState("");
   const [progress, setProgress] = useState(0);
@@ -274,6 +275,7 @@ export default function HypothesisMaker() {
         api_key: apiKey,
         model,
         assigned_project: assignedProject,
+        professor_name: profName,
         professor_instructions: profInstructions,
       });
       setJobId(data.job_id);
@@ -522,7 +524,20 @@ export default function HypothesisMaker() {
 
           <div>
             <label className="block text-sm text-zinc-400 mb-2">
-              직접 입력 — 배정 프로젝트 또는 추가 지시사항 (선택사항)
+              교수님 이름 (선택사항) — 저장될 파일명에 추가됩니다
+            </label>
+            <input
+              type="text"
+              value={profName}
+              onChange={(e) => setProfName(e.target.value)}
+              placeholder="예: 김철수"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">
+              추가 지시사항 (선택사항)
             </label>
             <textarea
               value={profInstructions}

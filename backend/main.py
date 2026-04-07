@@ -114,6 +114,7 @@ class AnalyzeBody(BaseModel):
     api_key: str
     model: str = ""
     assigned_project: str = ""
+    professor_name: str = ""
     professor_instructions: str = ""
 
 
@@ -151,10 +152,13 @@ async def start_analysis(body: AnalyzeBody):
                 body.professor_instructions,
             )
 
-            output_path = os.path.join(session["tmpdir"], "report.docx")
+            prof = body.professor_name.strip()
+            filename = f"Research_Starter_Kit_{prof}.docx" if prof else "Research_Starter_Kit.docx"
+            output_path = os.path.join(session["tmpdir"], filename)
             build_report(result, output_path)
 
             jobs[job_id]["result_path"] = output_path
+            jobs[job_id]["filename"] = filename
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 {"message": "리포트 생성 완료!", "percent": 100, "done": True},
@@ -206,10 +210,11 @@ async def download(job_id: str):
     path = jobs[job_id].get("result_path")
     if not path or not os.path.exists(path):
         raise HTTPException(404, "리포트가 아직 준비되지 않았습니다.")
+    filename = jobs[job_id].get("filename", "Research_Starter_Kit.docx")
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename="Research_Starter_Kit.docx",
+        filename=filename,
     )
 
 
