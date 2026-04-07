@@ -213,7 +213,8 @@ class AnalysisPipeline:
         finally:
             _stop.set()
 
-        # Try parsing; if it fails, retry once with a shorter prompt
+        # Try parsing; if it fails, retry once
+        result = None
         for attempt in range(2):
             try:
                 result = _parse_json_response(response)
@@ -221,14 +222,15 @@ class AnalysisPipeline:
             except json.JSONDecodeError:
                 if attempt == 0:
                     self._progress('JSON 파싱 실패 — 자동 재시도 중...', 72)
-                    _stop2 = threading.Event()
-                    threading.Thread(target=_keepalive, daemon=True).start()
                     try:
                         response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=16000)
-                    finally:
-                        _stop2.set()
+                    except Exception as retry_err:
+                        raise RuntimeError(f'재시도 중 API 오류: {retry_err}')
                 else:
-                    raise RuntimeError('AI가 올바른 형식으로 응답하지 않았습니다. 논문 수를 줄이거나 Claude Sonnet을 사용해보세요.')
+                    raise RuntimeError(
+                        'AI가 올바른 형식으로 응답하지 않았습니다. '
+                        '논문 수를 줄이거나 Claude Sonnet으로 변경해보세요.'
+                    )
 
         self._progress('Stage 2A 완료 — 체크리스트·배경지식·로드맵 생성 중...', 90)
 

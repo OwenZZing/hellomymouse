@@ -6,7 +6,9 @@ import { useCallback, useRef, useState } from "react";
 // ── Star background ───────────────────────────────────────────
 
 const STARS = [
-  { name: "@kseo_nkook", x: 82, y: 12, size: 12, opacity: 0.45 },
+  { name: "@kseo_nkook",    x: 82, y: 12, size: 12, opacity: 0.45 },
+  { name: "@infp_horong",   x: 6,  y: 18, size: 12, opacity: 0.45 },
+  { name: "@eunsuniverse",  x: 55, y: 90, size: 12, opacity: 0.45 },
 ];
 
 function StarBackground() {
