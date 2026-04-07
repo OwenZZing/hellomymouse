@@ -363,6 +363,14 @@ export default function HypothesisMaker() {
             </div>
           </div>
 
+          {provider === "gemini" && (
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <p className="text-xs text-amber-400">
+                ⚠ Gemini는 학술 논문 분석 시 안전 필터 차단 및 응답 지연(10분+)이 발생할 수 있습니다. Claude 또는 GPT 사용을 권장합니다.
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm text-zinc-400 mb-2">API Key</label>
             <input
