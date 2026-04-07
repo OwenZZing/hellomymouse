@@ -50,6 +50,28 @@ class APIClient:
         except ImportError:
             raise ImportError('google-generativeai not installed. Run: pip install google-generativeai')
 
+    def upload_files_for_gemini(self, file_paths: list) -> list:
+        """Upload PDF files to Gemini File API. Returns list of file objects."""
+        if self.provider != 'gemini':
+            raise ValueError('File API는 Gemini 전용입니다.')
+        uploaded = []
+        for path in file_paths:
+            try:
+                f = self._genai.upload_file(path=path)
+                uploaded.append(f)
+            except Exception as e:
+                raise RuntimeError(f'Gemini 파일 업로드 실패 ({path}): {e}')
+        return uploaded
+
+    def call_with_files(self, user_prompt: str, system_prompt: str = '',
+                        files: list = None, max_tokens: int = 4096) -> str:
+        """Gemini File API를 이용한 호출. Gemini가 아닐 경우 일반 call()로 fallback."""
+        if self.provider != 'gemini' or not files:
+            return self.call(user_prompt, system_prompt, max_tokens)
+        safe_max = self._MAX_TOKENS.get(self.model, max_tokens)
+        max_tokens = min(max_tokens, safe_max)
+        return self._call_gemini_with_files(user_prompt, system_prompt, files, max_tokens)
+
     # Per-model safe output token caps
     _MAX_TOKENS = {
         # Claude 4
@@ -127,6 +149,40 @@ class APIClient:
             raise RuntimeError('OpenAI API rate limit에 도달했습니다. 잠시 후 다시 시도하세요.')
         except Exception as e:
             raise RuntimeError(f'OpenAI API 오류: {e}')
+
+    def _call_gemini_with_files(self, user_prompt: str, system_prompt: str,
+                                files: list, max_tokens: int) -> str:
+        try:
+            parts = []
+            if system_prompt:
+                parts.append(f"[SYSTEM]\n{system_prompt}\n\n[USER]\n")
+            parts.extend(files)
+            parts.append(user_prompt)
+            response = self._client.generate_content(
+                parts,
+                generation_config={'max_output_tokens': max_tokens},
+                safety_settings=self._safety_settings,
+            )
+            if not response.candidates:
+                raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
+            candidate = response.candidates[0]
+            if candidate.finish_reason == 2:
+                raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
+            return response.text
+        except RuntimeError:
+            raise
+        except ValueError:
+            raise
+        except Exception as e:
+            err = str(e).lower()
+            if 'api_key' in err or 'authentication' in err or 'api key not valid' in err or 'invalid api key' in err:
+                raise ValueError(
+                    'Gemini API 키가 올바르지 않습니다. '
+                    'aistudio.google.com → Get API Key에서 발급한 키인지 확인하세요.'
+                )
+            if 'safety' in err or 'block' in err:
+                raise RuntimeError('Gemini 안전 필터에 의해 응답이 차단됐습니다. Claude 또는 OpenAI 모델을 사용해보세요.')
+            raise RuntimeError(f'Gemini API 오류: {e}')
 
     def _call_gemini(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
         try:

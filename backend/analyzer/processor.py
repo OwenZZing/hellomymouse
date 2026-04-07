@@ -98,8 +98,28 @@ class AnalysisPipeline:
             raise RuntimeError('읽을 수 있는 PDF가 없습니다.')
 
         self._progress('Stage 0: AI 프로젝트 분석 중...', 25)
-        prompt = build_stage0_prompt(title_abstracts)
-        response = self.api.call(prompt, STAGE_0_SYSTEM, max_tokens=2048)
+
+        # Gemini: File API로 PDF 직접 전송 (텍스트 payload 과부하 방지)
+        if self.api.provider == 'gemini':
+            try:
+                self._progress('Stage 0: Gemini File API로 PDF 업로드 중...', 22)
+                uploaded_files = self.api.upload_files_for_gemini(pdf_paths)
+                filenames = [os.path.basename(p) for p in pdf_paths]
+                prompt = (
+                    f"아래 {len(pdf_paths)}편의 연구 논문 PDF를 분석해 연구실 프로젝트를 파악해주세요.\n"
+                    f"파일 목록: {', '.join(filenames)}\n\n"
+                    "각 논문의 제목과 초록을 읽고 연구 주제를 분류하세요."
+                )
+                response = self.api.call_with_files(prompt, STAGE_0_SYSTEM,
+                                                    files=uploaded_files, max_tokens=2048)
+            except Exception as e:
+                # File API 실패 시 텍스트 방식으로 fallback
+                self._progress(f'  File API 실패, 텍스트 방식으로 재시도 중... ({e})', 22)
+                prompt = build_stage0_prompt(title_abstracts)
+                response = self.api.call(prompt, STAGE_0_SYSTEM, max_tokens=2048)
+        else:
+            prompt = build_stage0_prompt(title_abstracts)
+            response = self.api.call(prompt, STAGE_0_SYSTEM, max_tokens=2048)
 
         try:
             result = _parse_json_response(response)
