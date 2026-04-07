@@ -36,7 +36,7 @@ export default function Home() {
         <h1 className="text-5xl font-bold text-zinc-100 mb-4 tracking-tight">
           Hellomymouse
         </h1>
-        <p className="text-xl text-zinc-400 mb-6">Ph.D. in Neuroscience</p>
+        <p className="text-xl text-zinc-400 mb-6">Kyungri Kim · Ph.D. in Neuroscience</p>
         <p className="text-zinc-500 max-w-xl leading-relaxed">
           연구하면서 만든 것들을 올려두는 곳입니다.
           주로 대학원생에게 필요한 도구들을 만들고 있어요.
