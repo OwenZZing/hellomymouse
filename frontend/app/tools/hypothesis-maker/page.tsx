@@ -6,18 +6,7 @@ import { useCallback, useRef, useState } from "react";
 // ── Star background ───────────────────────────────────────────
 
 const STARS = [
-  { name: "@kseo_nkook", x: 5, y: 8, size: 10, opacity: 0.07 },
-  { name: "@kseo_nkook", x: 23, y: 31, size: 9, opacity: 0.05 },
-  { name: "@kseo_nkook", x: 67, y: 12, size: 11, opacity: 0.06 },
-  { name: "@kseo_nkook", x: 82, y: 45, size: 9, opacity: 0.07 },
-  { name: "@kseo_nkook", x: 44, y: 67, size: 10, opacity: 0.05 },
-  { name: "@kseo_nkook", x: 91, y: 78, size: 9, opacity: 0.06 },
-  { name: "@kseo_nkook", x: 15, y: 55, size: 10, opacity: 0.05 },
-  { name: "@kseo_nkook", x: 58, y: 88, size: 11, opacity: 0.07 },
-  { name: "@kseo_nkook", x: 76, y: 23, size: 9, opacity: 0.05 },
-  { name: "@kseo_nkook", x: 37, y: 42, size: 10, opacity: 0.06 },
-  { name: "@kseo_nkook", x: 3, y: 75, size: 9, opacity: 0.05 },
-  { name: "@kseo_nkook", x: 52, y: 18, size: 10, opacity: 0.07 },
+  { name: "@kseo_nkook", x: 82, y: 12, size: 11, opacity: 0.18 },
 ];
 
 function StarBackground() {
