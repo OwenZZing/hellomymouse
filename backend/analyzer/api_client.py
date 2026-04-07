@@ -43,7 +43,10 @@ class APIClient:
                 {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             ]
-            self._client = genai.GenerativeModel(self.model)
+            self._client = genai.GenerativeModel(
+                self.model,
+                safety_settings=self._safety_settings,
+            )
         except ImportError:
             raise ImportError('google-generativeai not installed. Run: pip install google-generativeai')
 
