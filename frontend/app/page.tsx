@@ -106,29 +106,23 @@ function StairWidget() {
   };
 
   return (
-    <div className="mb-16 p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-6 flex-wrap">
-      <div className="flex items-center gap-4">
-        <span className="text-4xl">🐭</span>
-        <div>
-          <p className="text-xs font-mono text-zinc-500 mb-1">오늘 오른 계단</p>
-          <p className="text-2xl font-bold text-zinc-100">
-            {stairs === null ? "..." : `${stairs}층`}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-col items-center gap-1">
+    <div className="mb-10 px-4 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3 flex-wrap">
+      <p className="text-sm text-zinc-400 font-mono">
+        🐭 오늘 오른 계단 <span className="text-zinc-100 font-bold">{stairs === null ? "..." : `${stairs}층`}</span>
+      </p>
+      <div className="flex items-center gap-2">
         <button
           onClick={handlePress}
           disabled={pressed}
-          className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+          className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
             pressed
-              ? "bg-violet-500/20 text-violet-400 border border-violet-500/30 cursor-default"
-              : "bg-zinc-800 hover:bg-violet-500/20 hover:border-violet-500/30 text-zinc-300 hover:text-violet-300 border border-zinc-700"
+              ? "text-violet-400 cursor-default"
+              : "text-zinc-500 hover:text-violet-400 border border-zinc-700 hover:border-violet-500/40"
           }`}
         >
-          {pressed ? "눌렀어요 ✓" : "박사님 운동하세요! 🔔"}
+          {pressed ? "✓ 눌렀어요" : "박사님 운동하세요! 🔔"}
         </button>
-        <p className="text-xs text-zinc-600 font-mono">{buttonCount}명이 눌렀어요</p>
+        <span className="text-xs text-zinc-600 font-mono">{buttonCount}명</span>
       </div>
     </div>
   );
