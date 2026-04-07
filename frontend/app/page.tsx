@@ -146,9 +146,9 @@ export default function Home() {
           연구하면서 만든 것들을 올려두는 곳입니다.
           주로 대학원생에게 필요한 도구들을 만들고 있어요.
         </p>
-        <p className="text-zinc-400 font-mono text-sm mt-4 italic">
+        <p className="text-amber-400 font-mono text-sm mt-4 italic">
           Ruptis Claustris, Scientia Omnibus
-          <span className="text-zinc-500 not-italic ml-2">— 닫힌 벽을 부수고, 지식을 모두에게</span>
+          <span className="text-amber-500 not-italic ml-2">— 닫힌 벽을 부수고, 지식을 모두에게</span>
         </p>
         <div className="flex gap-4 mt-6">
           <a
