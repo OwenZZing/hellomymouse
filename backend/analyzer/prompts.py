@@ -17,7 +17,13 @@ def build_stage0_prompt(title_abstracts: list[dict]) -> str:
         papers_text += f'[Paper {i}] {p["filename"]}\nTitle: {p["title"]}\nAbstract: {p["abstract"]}\n\n'
 
     return f"""Below are titles and abstracts from a research lab's recent papers.
-Identify 3-7 distinct ongoing research projects or themes in this lab.
+Identify ALL distinct ongoing research projects or themes in this lab. Aim for 4-10 projects.
+
+CRITICAL RULES:
+- Do NOT collapse different research axes into one project. If the lab works on both topic A and topic B, they must be separate projects.
+- Each project should correspond to a meaningfully different research question, method, or application domain.
+- Even if two papers share a broad field, split them if they use different methods or target different problems.
+- Assign each paper to the most specific matching project.
 
 PAPERS:
 {papers_text}
@@ -69,6 +75,7 @@ Return JSON with this exact structure:
   "limitations": ["limitation1", "limitation2"],
   "future_directions": ["direction1", "direction2"],
   "key_terms": ["term1", "term2"],
+  "paper_type": "simulation | experimental | theoretical | review | mixed — choose the most accurate",
   "summary": "2-3 sentence summary of what this paper does and finds",
   "limitation_for_hypo": "the single most exploitable limitation or gap for a follow-up hypothesis"
 }}"""
@@ -155,6 +162,8 @@ Generate a comprehensive Research Starter Kit. Follow these rules:
 - Impact stars: ★★☆☆☆=solid master's thesis topic, ★★★☆☆=strong thesis + employable, ★★★★☆=postdoc-level, career-defining
 - Period estimates: time assuming techniques already mastered (note: actual time 2-3x with learning)
 - Keep technical terms in English (not forced Korean translation)
+- paper_type 필드가 "simulation"인 논문에서 파생된 가설은 실험적 검증보다 시뮬레이션 검증을 우선으로 설계하세요
+- IMPORTANT: Keep each hypothesis field CONCISE (2-3 sentences max per field) to ensure ALL 7 hypotheses fit within the response. Completeness of all 7 hypotheses is more important than length of each.
 - Cost estimates in KRW for Korean market
 - STRICTLY FOLLOW the 3 mandatory rules defined in the system prompt (metrics+baseline, fallback plan, no naive A+B integration)
 

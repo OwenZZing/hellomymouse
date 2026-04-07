@@ -481,22 +481,33 @@ def _build_section2(doc, paper_summaries):
         body(doc, '(논문 요약 없음)')
         return
 
-    t = doc.add_table(rows=len(paper_summaries) + 1, cols=5)
+    t = doc.add_table(rows=len(paper_summaries) + 1, cols=6)
     t.style = 'Table Grid'
-    for j, h in enumerate(['논문', 'Tag', '요약', '핵심 결과', 'Limitation']):
+    for j, h in enumerate(['논문', 'Tag', '유형', '요약', '핵심 결과', 'Limitation']):
         t.rows[0].cells[j].text = h
     tbl_header(t)
+    type_colors = {
+        'simulation': 'DDEBF7',
+        'experimental': 'E2EFDA',
+        'theoretical': 'FFF2CC',
+        'review': 'F2F2F2',
+        'mixed': 'FCE4D6',
+    }
     for i, s in enumerate(paper_summaries):
         row = t.rows[i + 1].cells
         title = s.get('title', s.get('filename', ''))
+        ptype = s.get('paper_type', '').lower().split()[0] if s.get('paper_type') else ''
         row[0].text = title[:60] + ('...' if len(title) > 60 else '')
         row[1].text = s.get('method_tag', '')
-        row[2].text = s.get('summary', '')[:120]
-        row[3].text = s.get('key_finding', '')[:100]
-        row[4].text = s.get('limitation', '')[:100]
+        row[2].text = ptype if ptype else '-'
+        row[3].text = s.get('summary', '')[:120]
+        row[4].text = s.get('key_finding', '')[:100]
+        row[5].text = s.get('limitation', '')[:100]
+        if ptype in type_colors:
+            cell_bg(row[2], type_colors[ptype])
         if i % 2 == 0:
-            for cell in row:
-                cell_bg(cell, BG_ALT)
+            for ci in [0, 1, 3, 4, 5]:
+                cell_bg(row[ci], BG_ALT)
     tbl_style(t)
     doc.add_paragraph()
 
