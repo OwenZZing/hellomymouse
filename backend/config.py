@@ -18,9 +18,7 @@ MODEL_OPTIONS = {
         'o1-mini',
     ],
     'gemini': [
-        'gemini-2.5-pro',
         'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro',
+        'gemini-2.5-pro',
     ],
 }
