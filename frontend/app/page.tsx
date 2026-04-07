@@ -108,7 +108,7 @@ function StairWidget() {
   return (
     <div className="mb-10 px-4 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3 flex-wrap">
       <p className="text-sm text-zinc-400 font-mono">
-        🐭 오늘 오른 계단 <span className="text-zinc-100 font-bold">{stairs === null ? "..." : `${stairs}층`}</span>
+        🐭 오늘 오른 계단 <span className="text-zinc-100 font-bold">{stairs === null ? "-" : stairs === 0 ? "아직 0층 🥲" : `${stairs}층`}</span>
       </p>
       <div className="flex items-center gap-2">
         <button
