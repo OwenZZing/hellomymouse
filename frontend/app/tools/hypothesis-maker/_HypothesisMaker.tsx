@@ -379,10 +379,6 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         professor_name: profName,
         professor_instructions: profInstructions,
         language: locale,
-        review_name: reviewName,
-        review_field: reviewField,
-        review_stars: reviewStars,
-        review_comment: reviewComment,
       });
       setJobId(data.job_id);
       setStep("analyze");
@@ -410,7 +406,22 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     }
   };
 
-  const handleDownload = () => window.open(`${API_URL}/api/download/${jobId}`, "_blank");
+  const handleDownload = async () => {
+    const hasReview = reviewName || reviewField || reviewStars || reviewComment;
+    if (hasReview) {
+      await fetch(`${API_URL}/api/review/${jobId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_name: reviewName,
+          review_field: reviewField,
+          review_stars: reviewStars,
+          review_comment: reviewComment,
+        }),
+      });
+    }
+    window.open(`${API_URL}/api/download/${jobId}`, "_blank");
+  };
 
   const handleReset = () => {
     setStep("setup");
@@ -642,63 +653,6 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
               <p className="text-xs text-zinc-500">{c.costDesc}</p>
             </div>
 
-            {/* ── Review (optional) ── */}
-            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 space-y-4">
-              <div>
-                <p className="text-sm text-zinc-300 font-medium mb-1">{c.reviewLabel}</p>
-                <p className="text-xs text-zinc-600">{c.reviewDesc}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-zinc-500 mb-1">{c.reviewNameLabel}</label>
-                  <input
-                    type="text"
-                    value={reviewName}
-                    onChange={(e) => setReviewName(e.target.value)}
-                    placeholder={c.reviewNamePlaceholder}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-zinc-500 mb-1">{c.reviewFieldLabel}</label>
-                  <input
-                    type="text"
-                    value={reviewField}
-                    onChange={(e) => setReviewField(e.target.value)}
-                    placeholder={c.reviewFieldPlaceholder}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-2">{c.reviewStarsLabel}</label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setReviewStars(reviewStars === n ? 0 : n)}
-                      className={`text-xl transition-colors ${n <= reviewStars ? "text-amber-400" : "text-zinc-700 hover:text-zinc-500"}`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                  {reviewStars > 0 && (
-                    <span className="text-xs text-zinc-600 self-center ml-1">{reviewStars}/5</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1">{c.reviewCommentLabel}</label>
-                <textarea
-                  value={reviewComment}
-                  onChange={(e) => setReviewComment(e.target.value)}
-                  placeholder={c.reviewCommentPlaceholder}
-                  rows={2}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
-                />
-              </div>
-            </div>
-
             <div className="flex gap-3">
               <button
                 onClick={() => setStep("scan")}
@@ -748,14 +702,72 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
         {/* ── Step: done ── */}
         {step === "done" && (
-          <div className="space-y-6 text-center">
-            <div className="py-12">
+          <div className="space-y-6">
+            <div className="py-8 text-center">
               <div className="w-16 h-16 rounded-full bg-violet-500/10 border border-violet-500/30 flex items-center justify-center mx-auto mb-6">
                 <span className="text-3xl">✓</span>
               </div>
               <h2 className="text-2xl font-bold text-zinc-100 mb-2">{c.doneTitle}</h2>
               <p className="text-zinc-500 text-sm">{c.doneDesc}</p>
             </div>
+
+            {/* ── Review ── */}
+            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 space-y-4">
+              <div>
+                <p className="text-sm text-zinc-300 font-medium mb-1">{c.reviewLabel}</p>
+                <p className="text-xs text-zinc-600">{c.reviewDesc}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">{c.reviewNameLabel}</label>
+                  <input
+                    type="text"
+                    value={reviewName}
+                    onChange={(e) => setReviewName(e.target.value)}
+                    placeholder={c.reviewNamePlaceholder}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">{c.reviewFieldLabel}</label>
+                  <input
+                    type="text"
+                    value={reviewField}
+                    onChange={(e) => setReviewField(e.target.value)}
+                    placeholder={c.reviewFieldPlaceholder}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-2">{c.reviewStarsLabel}</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setReviewStars(reviewStars === n ? 0 : n)}
+                      className={`text-2xl transition-colors ${n <= reviewStars ? "text-amber-400" : "text-zinc-700 hover:text-zinc-500"}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                  {reviewStars > 0 && (
+                    <span className="text-xs text-zinc-600 self-center ml-1">{reviewStars}/5</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">{c.reviewCommentLabel}</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder={c.reviewCommentPlaceholder}
+                  rows={2}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                />
+              </div>
+            </div>
+
             <button
               onClick={handleDownload}
               className="w-full py-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-lg transition-colors"
@@ -768,7 +780,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
             >
               {c.restartBtn}
             </button>
-            <p className="text-xs text-zinc-600">{c.disclaimer}</p>
+            <p className="text-xs text-zinc-600 text-center">{c.disclaimer}</p>
           </div>
         )}
       </main>

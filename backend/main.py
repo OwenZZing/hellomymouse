@@ -117,10 +117,6 @@ class AnalyzeBody(BaseModel):
     professor_name: str = ""
     professor_instructions: str = ""
     language: str = "ko"
-    review_name: str = ""
-    review_field: str = ""
-    review_stars: int = 0
-    review_comment: str = ""
 
 
 @app.post("/api/analyze")
@@ -161,14 +157,9 @@ async def start_analysis(body: AnalyzeBody):
             prof = body.professor_name.strip()
             filename = f"Research_Starter_Kit_{prof}.docx" if prof else "Research_Starter_Kit.docx"
             output_path = os.path.join(session["tmpdir"], filename)
-            review = {
-                "name":    body.review_name.strip(),
-                "field":   body.review_field.strip(),
-                "stars":   body.review_stars,
-                "comment": body.review_comment.strip(),
-            }
-            build_report(result, output_path, review=review)
+            build_report(result, output_path)
 
+            jobs[job_id]["result_data"] = result
             jobs[job_id]["result_path"] = output_path
             jobs[job_id]["filename"] = filename
             loop.call_soon_threadsafe(
@@ -185,6 +176,36 @@ async def start_analysis(body: AnalyzeBody):
 
     threading.Thread(target=run_analysis, daemon=True).start()
     return {"job_id": job_id}
+
+
+# ── Apply review & rebuild docx ──────────────────────────────
+
+class ReviewBody(BaseModel):
+    review_name: str = ""
+    review_field: str = ""
+    review_stars: int = 0
+    review_comment: str = ""
+
+
+@app.post("/api/review/{job_id}")
+async def apply_review(job_id: str, body: ReviewBody):
+    if job_id not in jobs:
+        raise HTTPException(404, "Job not found")
+    result_data = jobs[job_id].get("result_data")
+    result_path = jobs[job_id].get("result_path")
+    if not result_data or not result_path:
+        raise HTTPException(404, "리포트 데이터가 없습니다.")
+
+    from report.docx_builder import build_report
+
+    review = {
+        "name":    body.review_name.strip(),
+        "field":   body.review_field.strip(),
+        "stars":   body.review_stars,
+        "comment": body.review_comment.strip(),
+    }
+    build_report(result_data, result_path, review=review)
+    return {"ok": True}
 
 
 # ── SSE progress stream ───────────────────────────────────────
