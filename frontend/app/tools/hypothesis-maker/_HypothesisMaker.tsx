@@ -106,6 +106,15 @@ const COPY = {
     connError: "서버 연결이 끊겼습니다. 다시 시도해주세요.",
     langSwitch: "English",
     langSwitchHref: "/en/tools/hypothesis-maker",
+    reviewLabel: "리뷰 남기기 — 선택사항 (Word 표지에 삽입됩니다)",
+    reviewDesc: "남겨주신 리뷰가 리포트 첫 페이지에 기록되어 공유 시 다른 분들에게 도움이 됩니다.",
+    reviewNameLabel: "이름",
+    reviewNamePlaceholder: "예: 김철수",
+    reviewFieldLabel: "연구 분야",
+    reviewFieldPlaceholder: "예: 신경과학, 로봇공학",
+    reviewStarsLabel: "별점",
+    reviewCommentLabel: "한줄평",
+    reviewCommentPlaceholder: "예: 처음 연구실 배정받았는데 너무 막막했는데 큰 도움이 됐어요!",
   },
   en: {
     backHome: "← Back to Home",
@@ -155,6 +164,15 @@ const COPY = {
     connError: "Server connection lost. Please try again.",
     langSwitch: "한국어",
     langSwitchHref: "/tools/hypothesis-maker",
+    reviewLabel: "Leave a review — optional (printed on the Word cover page)",
+    reviewDesc: "Your review will appear on the first page of the report, helping others when shared.",
+    reviewNameLabel: "Name",
+    reviewNamePlaceholder: "e.g. Jane Smith",
+    reviewFieldLabel: "Research field",
+    reviewFieldPlaceholder: "e.g. Neuroscience, Robotics",
+    reviewStarsLabel: "Rating",
+    reviewCommentLabel: "One-line review",
+    reviewCommentPlaceholder: "e.g. Saved me so much time getting oriented in the lab!",
   },
 };
 
@@ -288,6 +306,10 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [progressMsg, setProgressMsg] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [reviewName, setReviewName] = useState("");
+  const [reviewField, setReviewField] = useState("");
+  const [reviewStars, setReviewStars] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
 
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${API_URL}${path}`, {
@@ -357,6 +379,10 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         professor_name: profName,
         professor_instructions: profInstructions,
         language: locale,
+        review_name: reviewName,
+        review_field: reviewField,
+        review_stars: reviewStars,
+        review_comment: reviewComment,
       });
       setJobId(data.job_id);
       setStep("analyze");
@@ -391,6 +417,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
     setAssignedProject(""); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
+    setReviewName(""); setReviewField(""); setReviewStars(0); setReviewComment("");
   };
 
   return (
@@ -614,6 +641,64 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
               <p className="text-xs text-amber-400 font-medium mb-1">{c.costTitle}</p>
               <p className="text-xs text-zinc-500">{c.costDesc}</p>
             </div>
+
+            {/* ── Review (optional) ── */}
+            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 space-y-4">
+              <div>
+                <p className="text-sm text-zinc-300 font-medium mb-1">{c.reviewLabel}</p>
+                <p className="text-xs text-zinc-600">{c.reviewDesc}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">{c.reviewNameLabel}</label>
+                  <input
+                    type="text"
+                    value={reviewName}
+                    onChange={(e) => setReviewName(e.target.value)}
+                    placeholder={c.reviewNamePlaceholder}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">{c.reviewFieldLabel}</label>
+                  <input
+                    type="text"
+                    value={reviewField}
+                    onChange={(e) => setReviewField(e.target.value)}
+                    placeholder={c.reviewFieldPlaceholder}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-2">{c.reviewStarsLabel}</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setReviewStars(reviewStars === n ? 0 : n)}
+                      className={`text-xl transition-colors ${n <= reviewStars ? "text-amber-400" : "text-zinc-700 hover:text-zinc-500"}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                  {reviewStars > 0 && (
+                    <span className="text-xs text-zinc-600 self-center ml-1">{reviewStars}/5</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">{c.reviewCommentLabel}</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder={c.reviewCommentPlaceholder}
+                  rows={2}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                />
+              </div>
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={() => setStep("scan")}

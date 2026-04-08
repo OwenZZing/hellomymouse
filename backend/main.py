@@ -117,6 +117,10 @@ class AnalyzeBody(BaseModel):
     professor_name: str = ""
     professor_instructions: str = ""
     language: str = "ko"
+    review_name: str = ""
+    review_field: str = ""
+    review_stars: int = 0
+    review_comment: str = ""
 
 
 @app.post("/api/analyze")
@@ -157,7 +161,13 @@ async def start_analysis(body: AnalyzeBody):
             prof = body.professor_name.strip()
             filename = f"Research_Starter_Kit_{prof}.docx" if prof else "Research_Starter_Kit.docx"
             output_path = os.path.join(session["tmpdir"], filename)
-            build_report(result, output_path)
+            review = {
+                "name":    body.review_name.strip(),
+                "field":   body.review_field.strip(),
+                "stars":   body.review_stars,
+                "comment": body.review_comment.strip(),
+            }
+            build_report(result, output_path, review=review)
 
             jobs[job_id]["result_path"] = output_path
             jobs[job_id]["filename"] = filename

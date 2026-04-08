@@ -95,7 +95,7 @@ def tbl_style(table):
 
 # ── Document builder ──────────────────────────────────────────
 
-def build_report(data: dict, output_path: str) -> str:
+def build_report(data: dict, output_path: str, review: dict | None = None) -> str:
     """Build the Word document from Stage 2 JSON data. Returns output_path."""
     doc = Document()
     style = doc.styles['Normal']
@@ -117,7 +117,7 @@ def build_report(data: dict, output_path: str) -> str:
     intro = data.get('intro_for_undergrad', {})
 
     # ── Cover ────────────────────────────────────────────────
-    _build_cover(doc, lab_name, field)
+    _build_cover(doc, lab_name, field, review=review)
 
     # ── About page ───────────────────────────────────────────
     _build_about_page(doc)
@@ -159,7 +159,7 @@ def build_report(data: dict, output_path: str) -> str:
 
 # ── Section builders ─────────────────────────────────────────
 
-def _build_cover(doc, lab_name, field):
+def _build_cover(doc, lab_name, field, review: dict | None = None):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.add_run('\n\n')
@@ -184,6 +184,39 @@ def _build_cover(doc, lab_name, field):
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run('\n[주의] 이 리포트는 AI가 논문을 분석하여 자동 생성한 초안입니다.\n반드시 교수님 및 선배 연구원의 검토를 받으세요.\n\n')
     sf(run, size=9, color=COLOR_WARN)
+
+    # ── Review testimonial on cover ───────────────────────────
+    if review and any(review.values()):
+        name    = review.get('name', '').strip()
+        fld     = review.get('field', '').strip()
+        stars   = review.get('stars', 0)
+        comment = review.get('comment', '').strip()
+
+        if comment or stars:
+            sep = doc.add_paragraph()
+            sep.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r = sep.add_run('─' * 28)
+            sf(r, size=9, color=COLOR_ATTRIBUTION)
+
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if stars:
+                star_str = '★' * stars + '☆' * (5 - stars)
+                c = COLOR_STARS_HIGH if stars >= 4 else COLOR_STARS_LOW
+                r = p.add_run(f'{star_str}  ')
+                sf(r, bold=True, size=11, color=c)
+            if comment:
+                r = p.add_run(f'"{comment}"')
+                sf(r, size=10, color=COLOR_SECONDARY)
+            p.paragraph_format.space_after = Pt(2)
+
+            if name or fld:
+                byline = '— ' + ('  ·  '.join(filter(None, [name, fld])))
+                p2 = doc.add_paragraph()
+                p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                r = p2.add_run(byline)
+                sf(r, size=9, color=COLOR_MUTED)
+                p2.paragraph_format.space_after = Pt(6)
 
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
