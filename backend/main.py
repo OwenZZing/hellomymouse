@@ -75,17 +75,6 @@ def _cleanup_loop():
 threading.Thread(target=_cleanup_loop, daemon=True).start()
 
 
-@app.get("/api/debug/sheets")
-async def debug_sheets():
-    """Temporary debug endpoint — remove after confirming Sheets works."""
-    try:
-        import sheets
-        result = sheets.get_widget()
-        return {"ok": True, "data": result}
-    except Exception as e:
-        return {"ok": False, "error": str(e), "type": type(e).__name__}
-
-
 # Max file size: 50 MB per file, 500 MB total
 _MAX_FILE_SIZE = 50 * 1024 * 1024
 _MAX_TOTAL_SIZE = 500 * 1024 * 1024
