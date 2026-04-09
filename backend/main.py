@@ -284,6 +284,27 @@ async def submit_review(job_id: str, body: ReviewBody):
     return {"ok": True}
 
 
+@app.post("/api/review-direct")
+async def submit_review_direct(body: ReviewBody):
+    """job_id 없이 리뷰 직접 등록 (수동 추가용)."""
+    review = {
+        "name":     body.review_name.strip(),
+        "field":    body.review_field.strip(),
+        "position": body.review_position.strip(),
+        "stars":    body.review_stars,
+        "comment":  body.review_comment.strip(),
+        "provider": "",
+        "model":    "",
+        "created":  time.time(),
+    }
+    try:
+        sheets.append_review(review)
+    except Exception as e:
+        print(f"[sheets] append_review failed: {e}")
+        raise HTTPException(500, f"Sheets error: {e}")
+    return {"ok": True}
+
+
 @app.get("/api/reviews")
 async def get_reviews():
     try:
