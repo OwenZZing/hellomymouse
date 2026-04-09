@@ -5,6 +5,38 @@ import { useEffect, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
+function AvgRating() {
+  const [avg, setAvg] = useState<number | null>(null);
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/reviews`)
+      .then((r) => r.json())
+      .then((d) => {
+        const reviews = d.reviews ?? [];
+        const withStars = reviews.filter((r: { stars: number }) => r.stars > 0);
+        if (withStars.length > 0) {
+          const sum = withStars.reduce((s: number, r: { stars: number }) => s + r.stars, 0);
+          setAvg(Math.round((sum / withStars.length) * 10) / 10);
+          setCount(withStars.length);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  if (avg === null) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 mt-3">
+      <span className="text-amber-400 text-sm">
+        {"★".repeat(Math.round(avg))}{"☆".repeat(5 - Math.round(avg))}
+      </span>
+      <span className="text-zinc-400 text-sm font-medium">{avg}</span>
+      <span className="text-zinc-600 text-xs">({count} reviews)</span>
+    </div>
+  );
+}
+
 const tools = [
   {
     slug: "hypothesis-maker",
@@ -190,12 +222,15 @@ export default function HomeEN() {
                   </span>
                 </div>
                 <p className="text-zinc-400 text-sm leading-relaxed mb-4">{tool.description}</p>
-                <div className="flex gap-2 flex-wrap">
-                  {tool.tags.map((tag) => (
-                    <span key={tag} className="text-xs px-2 py-1 rounded-md bg-zinc-800 text-zinc-500">
-                      {tag}
-                    </span>
-                  ))}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex gap-2 flex-wrap">
+                    {tool.tags.map((tag) => (
+                      <span key={tag} className="text-xs px-2 py-1 rounded-md bg-zinc-800 text-zinc-500">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  {tool.slug === "hypothesis-maker" && <AvgRating />}
                 </div>
               </Link>
             ) : (
