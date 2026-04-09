@@ -6,12 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // ── Star background ───────────────────────────────────────────
 
 const STARS = [
-  { name: "@kseo_nkook",    x: 82, y: 12, size: 12, opacity: 0.45 },
-  { name: "@infp_horong",   x: 6,  y: 18, size: 12, opacity: 0.45 },
-  { name: "@eunsuniverse",  x: 55, y: 90, size: 12, opacity: 0.45 },
-  { name: "@금붕어탐사대",  x: 88, y: 75, size: 12, opacity: 0.85 },
-  { name: "@김진영",        x: 15, y: 82, size: 12, opacity: 0.45 },
-  { name: "@체강삼라",      x: 42, y: 8,  size: 12, opacity: 0.85 },
+  { name: "@kseo_nkook",    x: 82, y: 12, size: 12, opacity: 0.45, color: "text-violet-300" },
+  { name: "@infp_horong",   x: 6,  y: 18, size: 12, opacity: 0.45, color: "text-violet-300" },
+  { name: "@eunsuniverse",  x: 55, y: 90, size: 12, opacity: 0.45, color: "text-violet-300" },
+  { name: "@금붕어탐사대",  x: 88, y: 75, size: 12, opacity: 0.85, color: "text-amber-300" },
+  { name: "@김진영",        x: 15, y: 82, size: 12, opacity: 0.45, color: "text-blue-300" },
+  { name: "@체강삼라",      x: 42, y: 8,  size: 12, opacity: 0.45, color: "text-violet-300" },
 ];
 
 function StarBackground() {
@@ -20,7 +20,7 @@ function StarBackground() {
       {STARS.map((s, i) => (
         <span
           key={i}
-          className={`absolute font-mono ${s.opacity > 0.6 ? "text-amber-300" : "text-violet-300"}`}
+          className={`absolute font-mono ${s.color}`}
           style={{ left: `${s.x}%`, top: `${s.y}%`, fontSize: `${s.size}px`, opacity: s.opacity }}
         >
           {s.name}
@@ -605,7 +605,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                         </span>
                       )}
                       {r.name && (
-                        <span className={`text-xs font-medium ${r.position === "박사" || r.position === "Ph.D." ? "text-amber-400" : "text-zinc-400"}`}>
+                        <span className={`text-xs font-medium ${
+                          r.position === "박사" || r.position === "Ph.D." ? "text-amber-400"
+                          : r.position === "석사과정" || r.position === "Master's" ? "text-blue-400"
+                          : "text-zinc-400"
+                        }`}>
                           @{r.name}
                         </span>
                       )}
