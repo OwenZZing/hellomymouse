@@ -200,7 +200,8 @@ class AnalysisPipeline:
     # Stage 2: Synthesis + report generation
     # ──────────────────────────────────────────────
     def run_stage2(self, paper_analyses: list[dict], assigned_project: str,
-                   professor_instructions: str, language: str = "ko") -> dict:
+                   professor_instructions: str, language: str = "ko",
+                   student_level: str = "beginner") -> dict:
         """Synthesize all analyses into final report data."""
         self._progress('Stage 2: 가설 및 리포트 생성 중... (1-3분 소요)', 70)
 
@@ -228,7 +229,8 @@ class AnalysisPipeline:
 
         system2 = STAGE_2_SYSTEM_EN if language == "en" else STAGE_2_SYSTEM
         prompt = build_stage2_prompt(paper_analyses, assigned_project,
-                                     professor_instructions, detected_field, language)
+                                     professor_instructions, detected_field, language,
+                                     student_level)
         try:
             response = self.api.call(prompt, system2, max_tokens=16000)
         finally:
@@ -296,6 +298,7 @@ class AnalysisPipeline:
     def run_full_analysis(self, lab_pdf_paths: list[str], ref_pdf_paths: list[str],
                           assigned_project: str = '',
                           professor_instructions: str = '',
-                          language: str = 'ko') -> dict:
+                          language: str = 'ko',
+                          student_level: str = 'beginner') -> dict:
         paper_analyses = self.run_stage1(lab_pdf_paths, ref_pdf_paths, assigned_project)
-        return self.run_stage2(paper_analyses, assigned_project, professor_instructions, language)
+        return self.run_stage2(paper_analyses, assigned_project, professor_instructions, language, student_level)

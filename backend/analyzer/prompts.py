@@ -24,6 +24,7 @@ CRITICAL RULES:
 - Each project should correspond to a meaningfully different research question, method, or application domain.
 - Even if two papers share a broad field, split them if they use different methods or target different problems.
 - Assign each paper to the most specific matching project.
+- WEIGHT BY PAPER COUNT: If only 1 paper covers a topic while 5+ papers cover another, the single-paper topic is likely a minor/collaborative/one-off contribution, NOT a main lab project. Mark it as a secondary theme or merge it into a broader project. Do NOT treat a single paper as equal weight to a well-established research line.
 
 PAPERS:
 {papers_text}
@@ -97,6 +98,12 @@ Your goal: generate practical, feasible hypotheses grounded in the lab's existin
 Philosophy: each paper has a limitation — the student only needs to take ONE step forward.
 Return ONLY valid JSON with no markdown fences.
 
+=== JARGON ACCESSIBILITY RULE (MANDATORY) ===
+When a domain-specific term (jargon) appears for the FIRST TIME in any descriptive text, you MUST add a short plain-language explanation in parentheses.
+Example: "아티팩트(영상에 나타나는 인위적 왜곡/노이즈)", "팬텀(실제 인체를 대신하여 실험에 사용하는 모형)"
+This applies to ALL sections: overview, summaries, hypotheses, background knowledge, etc.
+Do NOT assume the reader knows field-specific vocabulary. The target reader may be a senior undergraduate who has never encountered these terms.
+
 === MANDATORY HYPOTHESIS QUALITY RULES ===
 
 RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE.
@@ -136,6 +143,12 @@ If a hypothesis depends on a custom or lab-built robot/hardware that may break o
   - The fallback_plan MUST include a cross-validation plan on a second platform (commercial robot or standard simulator).
   - Example: "Primary validation on SUBO-2; algorithm generalizability proven via identical test protocol on Unitree Go1 in Isaac Gym simulation, ensuring the contribution is platform-agnostic."
   - This cross-validation plan strengthens the paper's generalization claim and protects against hardware downtime.
+
+RULE 7 — REALISTIC TIMELINE ESTIMATES.
+Period estimates MUST account for the student's learning curve, NOT assume full mastery.
+  - For beginner students (학부 졸업, 분야 처음): multiply base estimate by 2-3x and explicitly note what skills need to be learned first (e.g., "딥러닝 프레임워크 학습 1-2개월 선행 필요").
+  - For intermediate students (관련 수업 수강): multiply by 1.5x.
+  - For advanced students (석사 이상, 연구 경험): base estimate is appropriate.
 """
 
 STAGE_2_SYSTEM_EN = """You are an expert research mentor helping a new graduate student find their first research hypothesis.
@@ -147,6 +160,12 @@ Your goal: generate practical, feasible hypotheses grounded in the lab's existin
 Philosophy: each paper has a limitation — the student only needs to take ONE step forward.
 Return ONLY valid JSON with no markdown fences.
 
+=== JARGON ACCESSIBILITY RULE (MANDATORY) ===
+When a domain-specific term (jargon) appears for the FIRST TIME in any descriptive text, you MUST add a short plain-language explanation in parentheses.
+Example: "artifact (unwanted distortion/noise in images)", "phantom (a physical model used in place of a human body for testing)"
+This applies to ALL sections: overview, summaries, hypotheses, background knowledge, etc.
+Do NOT assume the reader knows field-specific vocabulary. The target reader may be a senior undergraduate who has never encountered these terms.
+
 === MANDATORY HYPOTHESIS QUALITY RULES ===
 
 RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE.
@@ -186,16 +205,29 @@ If a hypothesis depends on a custom or lab-built robot/hardware that may break o
   - The fallback_plan MUST include a cross-validation plan on a second platform (commercial robot or standard simulator).
   - Example: "Primary validation on SUBO-2; algorithm generalizability proven via identical test protocol on Unitree Go1 in Isaac Gym simulation, ensuring the contribution is platform-agnostic."
   - This cross-validation plan strengthens the paper's generalization claim and protects against hardware downtime.
+
+RULE 7 — REALISTIC TIMELINE ESTIMATES.
+Period estimates MUST account for the student's learning curve, NOT assume full mastery.
+  - For beginner students (fresh undergrad, new to the field): multiply base estimate by 2-3x and explicitly note what skills need to be learned first (e.g., "1-2 months of deep learning framework study required first").
+  - For intermediate students (relevant coursework taken): multiply by 1.5x.
+  - For advanced students (master's+, research experience): base estimate is appropriate.
 """
 
 
 def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
                         professor_instructions: str, detected_field: str,
-                        language: str = "ko") -> str:
+                        language: str = "ko", student_level: str = "beginner") -> str:
     analyses_json = json.dumps(paper_analyses, ensure_ascii=False, indent=2)
     assigned_note = f'The student has been assigned to work on: "{assigned_project}"' if assigned_project else 'No specific project has been assigned yet.'
     prof_note = f'\nProfessor\'s additional instructions: {professor_instructions}' if professor_instructions else ''
     field_note = f'Primary research field detected: {detected_field}'
+
+    level_map = {
+        "beginner": "a complete beginner (senior undergrad, first time in this research field, no prior research experience). Explain ALL jargon. Timeline estimates must include learning overhead (2-3x base).",
+        "intermediate": "an intermediate student (has taken relevant coursework but limited research experience). Explain uncommon jargon. Timeline estimates should be 1.5x base.",
+        "advanced": "an advanced student (master's level or above, has research experience in a related field). Jargon explanation optional. Base timeline estimates are fine.",
+    }
+    level_note = f'Student background level: {level_map.get(student_level, level_map["beginner"])}'
 
     if language == "en":
         sim_note = 'For hypotheses derived from simulation-type papers, prioritize simulation validation over experimental validation.'
@@ -216,6 +248,7 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
 
 {assigned_note}{prof_note}
 {field_note}
+{level_note}
 
 Here are the analyses of all lab papers (and any professor-recommended references):
 {analyses_json}
@@ -293,10 +326,12 @@ Return this exact JSON structure:
 
 STAGE_2B_SYSTEM = """You are a research mentor helping a Korean graduate student prepare for their first research project.
 Write ALL content in Korean (한국어) except technical terms, model names, metric names, and venue names.
+When a domain-specific term appears for the first time, add a short plain-language explanation in parentheses.
 Return ONLY valid JSON with no markdown fences, no explanation."""
 
 STAGE_2B_SYSTEM_EN = """You are a research mentor helping a graduate student prepare for their first research project.
 Write ALL content in English.
+When a domain-specific term appears for the first time, add a short plain-language explanation in parentheses.
 Return ONLY valid JSON with no markdown fences, no explanation."""
 
 

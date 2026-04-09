@@ -93,6 +93,8 @@ const COPY = {
     labNameLabel: "추정 연구실 이름",
     profNameLabel: "교수님 이름 (선택사항) — 저장될 파일명에 추가됩니다",
     profNamePlaceholder: "예: 김철수",
+    bgLevelLabel: "본인의 배경지식 수준",
+    bgLevelOptions: ["학부 졸업 (이 분야 처음)", "학부 + 관련 수업 수강", "석사 이상 / 연구 경험 있음"],
     instrLabel: "추가 지시사항 (선택사항)",
     instrPlaceholder: "예: '교수님이 소프트 로봇 그리퍼 쪽을 맡아보라고 하셨어요' 또는 '특히 에너지 효율 관련 가설을 중점적으로 뽑아주세요'",
     costTitle: "비용 안내",
@@ -156,6 +158,8 @@ const COPY = {
     labNameLabel: "Estimated lab name",
     profNameLabel: "Professor name (optional) — added to the output filename",
     profNamePlaceholder: "e.g. John Smith",
+    bgLevelLabel: "Your background level",
+    bgLevelOptions: ["Undergrad (new to this field)", "Undergrad + relevant coursework", "Master's+ / research experience"],
     instrLabel: "Additional instructions (optional)",
     instrPlaceholder: "e.g. 'My PI told me to focus on soft robotic grippers' or 'Emphasize energy-efficiency hypotheses'",
     costTitle: "Estimated cost",
@@ -331,6 +335,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [labName, setLabName] = useState("");
   const [assignedProject, setAssignedProject] = useState("");
   const [profName, setProfName] = useState("");
+  const [bgLevel, setBgLevel] = useState("beginner");
   const [profInstructions, setProfInstructions] = useState("");
   const [jobId, setJobId] = useState("");
   const [progress, setProgress] = useState(0);
@@ -425,6 +430,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         assigned_project: assignedProject,
         professor_name: profName,
         professor_instructions: profInstructions,
+        student_level: bgLevel,
         language: locale,
       });
       setJobId(data.job_id);
@@ -478,7 +484,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const handleReset = () => {
     setStep("setup");
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
-    setAssignedProject(""); setProfInstructions(""); setJobId("");
+    setAssignedProject(""); setBgLevel("beginner"); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
     setReviewName(""); setReviewField(""); setReviewStars(0); setReviewComment(""); setReviewSubmitted(false);
   };
@@ -718,6 +724,24 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                 placeholder={c.profNamePlaceholder}
                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
               />
+            </div>
+            <div>
+              <label className="block text-sm text-zinc-400 mb-2">{c.bgLevelLabel}</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["beginner", "intermediate", "advanced"] as const).map((lvl, i) => (
+                  <button
+                    key={lvl}
+                    onClick={() => setBgLevel(lvl)}
+                    className={`py-2.5 px-2 rounded-lg border text-xs font-medium transition-all ${
+                      bgLevel === lvl
+                        ? "border-violet-500 bg-violet-500/10 text-violet-300"
+                        : "border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                    }`}
+                  >
+                    {c.bgLevelOptions[i]}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="block text-sm text-zinc-400 mb-2">{c.instrLabel}</label>

@@ -187,6 +187,7 @@ class AnalyzeBody(BaseModel):
     assigned_project: str = ""
     professor_name: str = ""
     professor_instructions: str = ""
+    student_level: str = "beginner"
     language: str = "ko"
 
 
@@ -224,6 +225,7 @@ async def start_analysis(body: AnalyzeBody):
                 body.assigned_project,
                 body.professor_instructions,
                 body.language,
+                body.student_level,
             )
 
             prof = re.sub(r'[^\w\s가-힣\-]', '', body.professor_name.strip())[:50]
