@@ -41,7 +41,7 @@ app.add_middleware(
 # In-memory stores (with creation timestamps for cleanup)
 sessions: dict[str, dict] = {}
 jobs: dict[str, dict] = {}
-reviews: list[dict] = []  # persistent review list (survives job cleanup)
+import sheets  # Google Sheets persistence
 
 # ── Session / temp file cleanup ─────────────────────────────
 _SESSION_TTL_SECONDS = 3600  # 1 hour
@@ -272,13 +272,20 @@ async def submit_review(job_id: str, body: ReviewBody):
         "model":    jobs[job_id].get("model", ""),
         "created":  time.time(),
     }
-    reviews.append(review)
+    try:
+        sheets.append_review(review)
+    except Exception as e:
+        print(f"[sheets] append_review failed: {e}")
     return {"ok": True}
 
 
 @app.get("/api/reviews")
 async def get_reviews():
-    return {"reviews": reviews}
+    try:
+        return {"reviews": sheets.get_reviews()}
+    except Exception as e:
+        print(f"[sheets] get_reviews failed: {e}")
+        return {"reviews": []}
 
 
 # ── SSE progress stream ───────────────────────────────────────
@@ -328,16 +335,25 @@ async def download(job_id: str):
 
 from datetime import datetime, timezone
 
-widget_state = {
-    "stairs": 0,
-    "button_count": 0,
-    "last_updated": "",
-}
+# In-memory cache for widget (reduces Sheets API calls)
+_widget_cache: dict = {"stairs": 0, "button_count": 0, "last_updated": ""}
+_widget_loaded = False
+
+
+def _load_widget():
+    global _widget_cache, _widget_loaded
+    if not _widget_loaded:
+        try:
+            _widget_cache = sheets.get_widget()
+        except Exception as e:
+            print(f"[sheets] get_widget failed: {e}")
+        _widget_loaded = True
 
 
 @app.get("/api/widget")
 async def get_widget():
-    return widget_state
+    _load_widget()
+    return _widget_cache
 
 
 class StairsBody(BaseModel):
@@ -349,15 +365,27 @@ class StairsBody(BaseModel):
 async def update_stairs(body: StairsBody):
     if body.secret != os.environ.get("WIDGET_SECRET", "hellomymouse"):
         raise HTTPException(403, "비밀번호가 틀렸습니다.")
-    widget_state["stairs"] = body.count
-    widget_state["last_updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return widget_state
+    _load_widget()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _widget_cache["stairs"] = body.count
+    _widget_cache["last_updated"] = today
+    try:
+        sheets.save_widget(today, body.count, _widget_cache["button_count"])
+    except Exception as e:
+        print(f"[sheets] save_widget failed: {e}")
+    return _widget_cache
 
 
 @app.post("/api/widget/button")
 async def press_button():
-    widget_state["button_count"] += 1
-    return {"button_count": widget_state["button_count"]}
+    _load_widget()
+    _widget_cache["button_count"] += 1
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        sheets.save_widget(today, _widget_cache["stairs"], _widget_cache["button_count"])
+    except Exception as e:
+        print(f"[sheets] save_widget failed: {e}")
+    return {"button_count": _widget_cache["button_count"]}
 
 
 if __name__ == "__main__":
