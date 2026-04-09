@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ── Star background ───────────────────────────────────────────
 
@@ -9,6 +9,7 @@ const STARS = [
   { name: "@kseo_nkook",    x: 82, y: 12, size: 12, opacity: 0.45 },
   { name: "@infp_horong",   x: 6,  y: 18, size: 12, opacity: 0.45 },
   { name: "@eunsuniverse",  x: 55, y: 90, size: 12, opacity: 0.45 },
+  { name: "@금붕어탐사대",  x: 35, y: 50, size: 12, opacity: 0.85 },
 ];
 
 function StarBackground() {
@@ -17,7 +18,7 @@ function StarBackground() {
       {STARS.map((s, i) => (
         <span
           key={i}
-          className="absolute font-mono text-violet-300"
+          className={`absolute font-mono ${s.opacity > 0.6 ? "text-amber-300" : "text-violet-300"}`}
           style={{ left: `${s.x}%`, top: `${s.y}%`, fontSize: `${s.size}px`, opacity: s.opacity }}
         >
           {s.name}
@@ -44,7 +45,7 @@ type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
 const MODELS: Record<Provider, string[]> = {
   claude: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
-  gemini: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"],
+  gemini: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash", "gemini-1.5-flash"],
 };
 
 const PROVIDER_LABELS: Record<Provider, string> = {
@@ -54,6 +55,8 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
+const MAX_TOTAL_SIZE = 200 * 1024 * 1024; // 200 MB total
 
 // ── Copy (i18n) ───────────────────────────────────────────────
 
@@ -106,8 +109,8 @@ const COPY = {
     connError: "서버 연결이 끊겼습니다. 다시 시도해주세요.",
     langSwitch: "English",
     langSwitchHref: "/en/tools/hypothesis-maker",
-    reviewLabel: "리뷰 남기기 — 선택사항 (Word 표지에 삽입됩니다)",
-    reviewDesc: "남겨주신 리뷰가 리포트 첫 페이지에 기록되어 공유 시 다른 분들에게 도움이 됩니다.",
+    reviewLabel: "리뷰 남기기 — 선택사항",
+    reviewDesc: "남겨주신 리뷰가 이 페이지에 표시되어 다른 분들에게 도움이 됩니다.",
     reviewNameLabel: "이름",
     reviewNamePlaceholder: "예: 김철수",
     reviewFieldLabel: "연구 분야",
@@ -115,6 +118,11 @@ const COPY = {
     reviewStarsLabel: "별점",
     reviewCommentLabel: "한줄평",
     reviewCommentPlaceholder: "예: 처음 연구실 배정받았는데 너무 막막했는데 큰 도움이 됐어요!",
+    reviewSubmitBtn: "리뷰 남기기",
+    reviewSubmitted: "리뷰가 등록되었습니다!",
+    reviewsTitle: "사용자 리뷰",
+    reviewNoReviews: "아직 리뷰가 없습니다.",
+    reviewModelLabel: "분석 모델",
   },
   en: {
     backHome: "← Back to Home",
@@ -164,8 +172,8 @@ const COPY = {
     connError: "Server connection lost. Please try again.",
     langSwitch: "한국어",
     langSwitchHref: "/tools/hypothesis-maker",
-    reviewLabel: "Leave a review — optional (printed on the Word cover page)",
-    reviewDesc: "Your review will appear on the first page of the report, helping others when shared.",
+    reviewLabel: "Leave a review — optional",
+    reviewDesc: "Your review will be displayed on this page to help others.",
     reviewNameLabel: "Name",
     reviewNamePlaceholder: "e.g. Jane Smith",
     reviewFieldLabel: "Research field",
@@ -173,6 +181,11 @@ const COPY = {
     reviewStarsLabel: "Rating",
     reviewCommentLabel: "One-line review",
     reviewCommentPlaceholder: "e.g. Saved me so much time getting oriented in the lab!",
+    reviewSubmitBtn: "Submit review",
+    reviewSubmitted: "Review submitted!",
+    reviewsTitle: "User reviews",
+    reviewNoReviews: "No reviews yet.",
+    reviewModelLabel: "Model used",
   },
 };
 
@@ -224,14 +237,32 @@ function DropZone({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
+  const validateAndAdd = useCallback(
+    (newFiles: File[]) => {
+      const pdfs = newFiles.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+      const tooLarge = pdfs.find((f) => f.size > MAX_FILE_SIZE);
+      if (tooLarge) {
+        alert(`파일이 너무 큽니다: ${tooLarge.name} (최대 50MB)`);
+        return;
+      }
+      const combined = [...files, ...pdfs];
+      const totalSize = combined.reduce((s, f) => s + f.size, 0);
+      if (totalSize > MAX_TOTAL_SIZE) {
+        alert("전체 파일 크기가 200MB를 초과합니다.");
+        return;
+      }
+      onChange(combined);
+    },
+    [files, onChange]
+  );
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      const dropped = Array.from(e.dataTransfer.files).filter((f) => f.name.endsWith(".pdf"));
-      onChange([...files, ...dropped]);
+      validateAndAdd(Array.from(e.dataTransfer.files));
     },
-    [files, onChange]
+    [validateAndAdd]
   );
 
   return (
@@ -254,7 +285,7 @@ function DropZone({
           className="hidden"
           onChange={(e) => {
             const selected = Array.from(e.target.files || []);
-            onChange([...files, ...selected]);
+            validateAndAdd(selected);
             e.target.value = "";
           }}
         />
@@ -310,6 +341,22 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [reviewField, setReviewField] = useState("");
   const [reviewStars, setReviewStars] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
+  const [existingReviews, setExistingReviews] = useState<
+    { name: string; field: string; stars: number; comment: string; provider: string; model: string }[]
+  >([]);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
+  const fetchReviews = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/reviews`);
+      if (res.ok) {
+        const data = await res.json();
+        setExistingReviews(data.reviews ?? []);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchReviews(); }, [fetchReviews]);
 
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${API_URL}${path}`, {
@@ -406,9 +453,9 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     }
   };
 
-  const handleDownload = async () => {
+  const handleSubmitReview = async () => {
     const hasReview = reviewName || reviewField || reviewStars || reviewComment;
-    if (hasReview) {
+    if (hasReview && jobId) {
       await fetch(`${API_URL}/api/review/${jobId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -419,7 +466,12 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           review_comment: reviewComment,
         }),
       });
+      setReviewSubmitted(true);
+      fetchReviews();
     }
+  };
+
+  const handleDownload = () => {
     window.open(`${API_URL}/api/download/${jobId}`, "_blank");
   };
 
@@ -428,7 +480,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
     setAssignedProject(""); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
-    setReviewName(""); setReviewField(""); setReviewStars(0); setReviewComment("");
+    setReviewName(""); setReviewField(""); setReviewStars(0); setReviewComment(""); setReviewSubmitted(false);
   };
 
   return (
@@ -520,6 +572,35 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
             >
               {c.nextBtn}
             </button>
+
+            {/* ── User reviews ── */}
+            {existingReviews.length > 0 && (
+              <div className="space-y-3 pt-4 border-t border-zinc-800">
+                <h3 className="text-sm font-medium text-zinc-400">{c.reviewsTitle}</h3>
+                {existingReviews.slice().reverse().map((r, i) => (
+                  <div key={i} className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      {r.stars > 0 && (
+                        <span className={`text-sm ${r.stars >= 4 ? "text-amber-400" : "text-zinc-500"}`}>
+                          {"★".repeat(r.stars)}{"☆".repeat(5 - r.stars)}
+                        </span>
+                      )}
+                      {(r.name || r.field) && (
+                        <span className="text-xs text-zinc-500">
+                          {[r.name, r.field].filter(Boolean).join("  ·  ")}
+                        </span>
+                      )}
+                    </div>
+                    {r.comment && <p className="text-sm text-zinc-300">{r.comment}</p>}
+                    {(r.provider || r.model) && (
+                      <p className="text-xs text-zinc-600 mt-1">
+                        {c.reviewModelLabel}: {[r.provider, r.model].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -766,6 +847,17 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
                 />
               </div>
+              {reviewSubmitted ? (
+                <p className="text-sm text-emerald-400 text-center">{c.reviewSubmitted}</p>
+              ) : (
+                <button
+                  onClick={handleSubmitReview}
+                  disabled={!reviewName && !reviewField && !reviewStars && !reviewComment}
+                  className="w-full py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-200 text-sm transition-colors"
+                >
+                  {c.reviewSubmitBtn}
+                </button>
+              )}
             </div>
 
             <button
@@ -774,6 +866,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
             >
               {c.downloadBtn}
             </button>
+
             <button
               onClick={handleReset}
               className="w-full py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 text-sm transition-all"

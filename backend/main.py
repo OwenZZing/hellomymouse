@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import shutil
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -19,20 +22,71 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 app = FastAPI(title="Hypothesis Maker API")
 
+# CORS: production domains + localhost for dev
+_ALLOWED_ORIGINS = [
+    "https://hellomymouse.com",
+    "https://www.hellomymouse.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory stores
+# In-memory stores (with creation timestamps for cleanup)
 sessions: dict[str, dict] = {}
 jobs: dict[str, dict] = {}
+reviews: list[dict] = []  # persistent review list (survives job cleanup)
+
+# ── Session / temp file cleanup ─────────────────────────────
+_SESSION_TTL_SECONDS = 3600  # 1 hour
+
+
+def _cleanup_expired():
+    """Remove sessions and jobs older than TTL, delete their temp files."""
+    now = time.time()
+    for sid in list(sessions):
+        s = sessions[sid]
+        if now - s.get("_created", now) > _SESSION_TTL_SECONDS:
+            tmpdir = s.get("tmpdir")
+            if tmpdir and os.path.isdir(tmpdir):
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            sessions.pop(sid, None)
+    for jid in list(jobs):
+        j = jobs[jid]
+        if now - j.get("_created", now) > _SESSION_TTL_SECONDS:
+            jobs.pop(jid, None)
+
+
+def _cleanup_loop():
+    while True:
+        time.sleep(300)  # every 5 minutes
+        try:
+            _cleanup_expired()
+        except Exception:
+            pass
+
+
+threading.Thread(target=_cleanup_loop, daemon=True).start()
+
+# Max file size: 50 MB per file, 200 MB total
+_MAX_FILE_SIZE = 50 * 1024 * 1024
+_MAX_TOTAL_SIZE = 200 * 1024 * 1024
 
 
 # ── Upload PDFs ───────────────────────────────────────────────
+
+def _safe_filename(name: str) -> str:
+    """Sanitize filename: keep only safe characters, strip path components."""
+    name = os.path.basename(name)
+    name = re.sub(r'[^\w\s\-.\(\)\[\]가-힣]', '_', name)
+    return name[:200] or "file.pdf"
+
 
 @app.post("/api/upload")
 async def upload_files(
@@ -41,21 +95,36 @@ async def upload_files(
 ):
     session_id = str(uuid.uuid4())
     tmpdir = tempfile.mkdtemp()
+    total_size = 0
 
     lab_paths: list[str] = []
     for f in files:
         if f.filename and f.filename.lower().endswith(".pdf"):
-            dest = os.path.join(tmpdir, "lab_" + f.filename)
+            content = await f.read()
+            if len(content) > _MAX_FILE_SIZE:
+                raise HTTPException(413, f"파일이 너무 큽니다: {f.filename} (최대 50MB)")
+            total_size += len(content)
+            if total_size > _MAX_TOTAL_SIZE:
+                raise HTTPException(413, "전체 파일 크기가 200MB를 초과합니다.")
+            safe_name = _safe_filename(f.filename)
+            dest = os.path.join(tmpdir, "lab_" + safe_name)
             with open(dest, "wb") as out:
-                out.write(await f.read())
+                out.write(content)
             lab_paths.append(dest)
 
     ref_paths: list[str] = []
     for f in (ref_files or []):
         if f.filename and f.filename.lower().endswith(".pdf"):
-            dest = os.path.join(tmpdir, "ref_" + f.filename)
+            content = await f.read()
+            if len(content) > _MAX_FILE_SIZE:
+                raise HTTPException(413, f"파일이 너무 큽니다: {f.filename} (최대 50MB)")
+            total_size += len(content)
+            if total_size > _MAX_TOTAL_SIZE:
+                raise HTTPException(413, "전체 파일 크기가 200MB를 초과합니다.")
+            safe_name = _safe_filename(f.filename)
+            dest = os.path.join(tmpdir, "ref_" + safe_name)
             with open(dest, "wb") as out:
-                out.write(await f.read())
+                out.write(content)
             ref_paths.append(dest)
 
     if not lab_paths:
@@ -65,6 +134,7 @@ async def upload_files(
         "lab_paths": lab_paths,
         "ref_paths": ref_paths,
         "tmpdir": tmpdir,
+        "_created": time.time(),
     }
     return {
         "session_id": session_id,
@@ -127,7 +197,8 @@ async def start_analysis(body: AnalyzeBody):
     session = sessions[body.session_id]
     job_id = str(uuid.uuid4())
     queue: asyncio.Queue = asyncio.Queue()
-    jobs[job_id] = {"queue": queue, "result_path": None, "error": None}
+    jobs[job_id] = {"queue": queue, "result_path": None, "error": None, "_created": time.time(),
+                     "api_provider": body.api_provider, "model": body.model}
 
     loop = asyncio.get_event_loop()
 
@@ -154,7 +225,7 @@ async def start_analysis(body: AnalyzeBody):
                 body.language,
             )
 
-            prof = body.professor_name.strip()
+            prof = re.sub(r'[^\w\s가-힣\-]', '', body.professor_name.strip())[:50]
             filename = f"Research_Starter_Kit_{prof}.docx" if prof else "Research_Starter_Kit.docx"
             output_path = os.path.join(session["tmpdir"], filename)
             build_report(result, output_path)
@@ -178,7 +249,7 @@ async def start_analysis(body: AnalyzeBody):
     return {"job_id": job_id}
 
 
-# ── Apply review & rebuild docx ──────────────────────────────
+# ── Reviews ──────────────────────────────────────────────────
 
 class ReviewBody(BaseModel):
     review_name: str = ""
@@ -188,24 +259,26 @@ class ReviewBody(BaseModel):
 
 
 @app.post("/api/review/{job_id}")
-async def apply_review(job_id: str, body: ReviewBody):
+async def submit_review(job_id: str, body: ReviewBody):
     if job_id not in jobs:
         raise HTTPException(404, "Job not found")
-    result_data = jobs[job_id].get("result_data")
-    result_path = jobs[job_id].get("result_path")
-    if not result_data or not result_path:
-        raise HTTPException(404, "리포트 데이터가 없습니다.")
-
-    from report.docx_builder import build_report
 
     review = {
-        "name":    body.review_name.strip(),
-        "field":   body.review_field.strip(),
-        "stars":   body.review_stars,
-        "comment": body.review_comment.strip(),
+        "name":     body.review_name.strip(),
+        "field":    body.review_field.strip(),
+        "stars":    body.review_stars,
+        "comment":  body.review_comment.strip(),
+        "provider": jobs[job_id].get("api_provider", ""),
+        "model":    jobs[job_id].get("model", ""),
+        "created":  time.time(),
     }
-    build_report(result_data, result_path, review=review)
+    reviews.append(review)
     return {"ok": True}
+
+
+@app.get("/api/reviews")
+async def get_reviews():
+    return {"reviews": reviews}
 
 
 # ── SSE progress stream ───────────────────────────────────────
