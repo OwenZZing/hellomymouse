@@ -1,7 +1,7 @@
 DEFAULT_MODELS = {
     'claude': 'claude-sonnet-4-6',
     'openai': 'gpt-4o',
-    'gemini': 'gemini-2.0-flash',
+    'gemini': 'gemini-2.5-flash',
 }
 
 MODEL_OPTIONS = {
@@ -18,9 +18,6 @@ MODEL_OPTIONS = {
         'o1-mini',
     ],
     'gemini': [
-        'gemini-2.0-flash',
-        'gemini-2.0-flash-lite',
         'gemini-2.5-flash',
-        'gemini-1.5-flash',
     ],
 }

@@ -45,7 +45,7 @@ type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
 const MODELS: Record<Provider, string[]> = {
   claude: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
-  gemini: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash", "gemini-1.5-flash"],
+  gemini: ["gemini-2.5-flash"],
 };
 
 const PROVIDER_LABELS: Record<Provider, string> = {
@@ -602,9 +602,14 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                           {"★".repeat(r.stars)}{"☆".repeat(5 - r.stars)}
                         </span>
                       )}
-                      {(r.name || r.field) && (
+                      {r.name && (
+                        <span className={`text-xs font-medium ${r.position === "박사" || r.position === "Ph.D." ? "text-amber-400" : "text-zinc-400"}`}>
+                          @{r.name}
+                        </span>
+                      )}
+                      {(r.position || r.field) && (
                         <span className="text-xs text-zinc-500">
-                          {[r.name, r.position, r.field].filter(Boolean).join("  ·  ")}
+                          {[r.position, r.field].filter(Boolean).join("  ·  ")}
                         </span>
                       )}
                     </div>

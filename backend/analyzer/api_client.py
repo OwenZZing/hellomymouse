@@ -6,7 +6,7 @@ from config import DEFAULT_MODELS
 # Gemini models known to have stricter safety enforcement
 _GEMINI_STRICT_MODELS = {'gemini-2.5-flash', 'gemini-2.5-pro'}
 # Fallback model when a strict model gets safety-blocked
-_GEMINI_FALLBACK_MODEL = 'gemini-2.0-flash'
+_GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
 
 
 class APIClient:
@@ -98,10 +98,6 @@ class APIClient:
         # Gemini
         'gemini-2.5-pro':                8192,
         'gemini-2.5-flash':              8192,
-        'gemini-2.0-flash':              8192,
-        'gemini-2.0-flash-lite':         8192,
-        'gemini-1.5-pro':                8192,
-        'gemini-1.5-flash':              8192,
     }
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
