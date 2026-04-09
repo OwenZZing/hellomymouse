@@ -490,8 +490,25 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     }
   };
 
-  const handleDownload = () => {
-    window.open(`${API_URL}/api/download/${jobId}`, "_blank");
+  const handleDownload = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/download/${jobId}`);
+      if (!res.ok) {
+        setError(`다운로드 실패 (${res.status}): 분석 세션이 만료되었을 수 있습니다. 다시 분석해 주세요.`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Research_Starter_Kit.docx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(`다운로드 오류: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const handleReset = () => {
