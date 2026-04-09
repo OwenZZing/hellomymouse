@@ -10,6 +10,8 @@ const STARS = [
   { name: "@infp_horong",   x: 6,  y: 18, size: 12, opacity: 0.45 },
   { name: "@eunsuniverse",  x: 55, y: 90, size: 12, opacity: 0.45 },
   { name: "@금붕어탐사대",  x: 88, y: 75, size: 12, opacity: 0.85 },
+  { name: "@김진영",        x: 15, y: 82, size: 12, opacity: 0.45 },
+  { name: "@체강삼라",      x: 42, y: 8,  size: 12, opacity: 0.85 },
 ];
 
 function StarBackground() {

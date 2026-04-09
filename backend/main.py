@@ -305,6 +305,16 @@ async def submit_review_direct(body: ReviewBody):
     return {"ok": True}
 
 
+@app.delete("/api/review/{row_index}")
+async def delete_review(row_index: int):
+    """Sheets 행 번호로 리뷰 삭제 (header=1, 첫 데이터=2)."""
+    try:
+        sheets.delete_review(row_index)
+    except Exception as e:
+        raise HTTPException(500, f"Sheets error: {e}")
+    return {"ok": True}
+
+
 @app.get("/api/reviews")
 async def get_reviews():
     try:

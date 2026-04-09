@@ -49,6 +49,12 @@ def get_reviews() -> list[dict]:
     return rows
 
 
+def delete_review(row_index: int):
+    """Delete a review row (1-based, header=1 so first data row=2)."""
+    ws = _sheet("Reviews")
+    ws.delete_rows(row_index)
+
+
 # ── Widget (Stairs) ──────────────────────────────────────────
 
 _WIDGET_HEADERS = ["date", "stairs", "button_count"]
