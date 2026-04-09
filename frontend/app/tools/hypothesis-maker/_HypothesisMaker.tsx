@@ -428,6 +428,22 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     }
   };
 
+  const downloadFile = async (id: string) => {
+    const res = await fetch(`${API_URL}/api/download/${id}`);
+    if (!res.ok) {
+      throw new Error(`${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Research_Starter_Kit.docx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleAnalyze = async () => {
     setError("");
     setLoading(true);
@@ -456,8 +472,15 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         if (d.done) {
           es.close();
           setLoading(false);
-          if (d.error) setError(d.error);
-          else setStep("done");
+          if (d.error) {
+            setError(d.error);
+          } else {
+            setStep("done");
+            // 자동 다운로드 트리거 (사용자가 자리 비우는 동안 세션 만료 방지)
+            downloadFile(data.job_id).catch(() => {
+              // 자동 다운로드 실패는 조용히 무시 — 사용자가 수동 버튼으로 재시도 가능
+            });
+          }
         }
       };
       es.onerror = () => {
@@ -492,22 +515,14 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
   const handleDownload = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/download/${jobId}`);
-      if (!res.ok) {
-        setError(`다운로드 실패 (${res.status}): 분석 세션이 만료되었을 수 있습니다. 다시 분석해 주세요.`);
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "Research_Starter_Kit.docx";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await downloadFile(jobId);
     } catch (e) {
-      setError(`다운로드 오류: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "404") {
+        setError("다운로드 실패: 분석 세션이 만료되었습니다. 다시 분석해 주세요.");
+      } else {
+        setError(`다운로드 오류: ${msg}`);
+      }
     }
   };
 
