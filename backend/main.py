@@ -257,6 +257,7 @@ async def start_analysis(body: AnalyzeBody):
 class ReviewBody(BaseModel):
     review_name: str = ""
     review_field: str = ""
+    review_position: str = ""
     review_stars: int = 0
     review_comment: str = ""
 
@@ -269,6 +270,7 @@ async def submit_review(job_id: str, body: ReviewBody):
     review = {
         "name":     body.review_name.strip(),
         "field":    body.review_field.strip(),
+        "position": body.review_position.strip(),
         "stars":    body.review_stars,
         "comment":  body.review_comment.strip(),
         "provider": jobs[job_id].get("api_provider", ""),

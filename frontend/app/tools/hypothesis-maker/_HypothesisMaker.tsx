@@ -117,6 +117,8 @@ const COPY = {
     reviewNamePlaceholder: "예: 김철수",
     reviewFieldLabel: "연구 분야",
     reviewFieldPlaceholder: "예: 신경과학, 로봇공학",
+    reviewPositionLabel: "소속",
+    reviewPositionOptions: ["학부생", "석사과정", "박사과정", "박사"],
     reviewStarsLabel: "별점",
     reviewCommentLabel: "한줄평",
     reviewCommentPlaceholder: "예: 처음 연구실 배정받았는데 너무 막막했는데 큰 도움이 됐어요!",
@@ -182,6 +184,8 @@ const COPY = {
     reviewNamePlaceholder: "e.g. Jane Smith",
     reviewFieldLabel: "Research field",
     reviewFieldPlaceholder: "e.g. Neuroscience, Robotics",
+    reviewPositionLabel: "Position",
+    reviewPositionOptions: ["Undergrad", "Master's", "Ph.D. student", "Ph.D."],
     reviewStarsLabel: "Rating",
     reviewCommentLabel: "One-line review",
     reviewCommentPlaceholder: "e.g. Saved me so much time getting oriented in the lab!",
@@ -345,9 +349,10 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [reviewName, setReviewName] = useState("");
   const [reviewField, setReviewField] = useState("");
   const [reviewStars, setReviewStars] = useState(0);
+  const [reviewPosition, setReviewPosition] = useState("");
   const [reviewComment, setReviewComment] = useState("");
   const [existingReviews, setExistingReviews] = useState<
-    { name: string; field: string; stars: number; comment: string; provider: string; model: string }[]
+    { name: string; field: string; position: string; stars: number; comment: string; provider: string; model: string }[]
   >([]);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
@@ -468,6 +473,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         body: JSON.stringify({
           review_name: reviewName,
           review_field: reviewField,
+          review_position: reviewPosition,
           review_stars: reviewStars,
           review_comment: reviewComment,
         }),
@@ -486,7 +492,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
     setAssignedProject(""); setBgLevel("beginner"); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
-    setReviewName(""); setReviewField(""); setReviewStars(0); setReviewComment(""); setReviewSubmitted(false);
+    setReviewName(""); setReviewField(""); setReviewPosition(""); setReviewStars(0); setReviewComment(""); setReviewSubmitted(false);
   };
 
   return (
@@ -593,7 +599,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                       )}
                       {(r.name || r.field) && (
                         <span className="text-xs text-zinc-500">
-                          {[r.name, r.field].filter(Boolean).join("  ·  ")}
+                          {[r.name, r.position, r.field].filter(Boolean).join("  ·  ")}
                         </span>
                       )}
                     </div>
@@ -842,6 +848,24 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                     placeholder={c.reviewFieldPlaceholder}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors"
                   />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-2">{c.reviewPositionLabel}</label>
+                <div className="flex gap-2">
+                  {c.reviewPositionOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => setReviewPosition(reviewPosition === opt ? "" : opt)}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                        reviewPosition === opt
+                          ? "border-violet-500 bg-violet-500/10 text-violet-300"
+                          : "border-zinc-700 text-zinc-500 hover:border-zinc-500"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div>

@@ -32,7 +32,7 @@ def _sheet(tab: str) -> gspread.Worksheet:
 
 # ── Reviews ──────────────────────────────────────────────────
 
-_REVIEW_HEADERS = ["name", "field", "stars", "comment", "provider", "model", "created"]
+_REVIEW_HEADERS = ["name", "field", "position", "stars", "comment", "provider", "model", "created"]
 
 
 def append_review(review: dict):
