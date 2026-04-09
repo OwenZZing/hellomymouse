@@ -74,9 +74,9 @@ def _cleanup_loop():
 
 threading.Thread(target=_cleanup_loop, daemon=True).start()
 
-# Max file size: 50 MB per file, 200 MB total
+# Max file size: 50 MB per file, 500 MB total
 _MAX_FILE_SIZE = 50 * 1024 * 1024
-_MAX_TOTAL_SIZE = 200 * 1024 * 1024
+_MAX_TOTAL_SIZE = 500 * 1024 * 1024
 
 
 # ── Upload PDFs ───────────────────────────────────────────────
@@ -105,7 +105,7 @@ async def upload_files(
                 raise HTTPException(413, f"파일이 너무 큽니다: {f.filename} (최대 50MB)")
             total_size += len(content)
             if total_size > _MAX_TOTAL_SIZE:
-                raise HTTPException(413, "전체 파일 크기가 200MB를 초과합니다.")
+                raise HTTPException(413, "전체 파일 크기가 500MB를 초과합니다.")
             safe_name = _safe_filename(f.filename)
             dest = os.path.join(tmpdir, "lab_" + safe_name)
             with open(dest, "wb") as out:
@@ -120,7 +120,7 @@ async def upload_files(
                 raise HTTPException(413, f"파일이 너무 큽니다: {f.filename} (최대 50MB)")
             total_size += len(content)
             if total_size > _MAX_TOTAL_SIZE:
-                raise HTTPException(413, "전체 파일 크기가 200MB를 초과합니다.")
+                raise HTTPException(413, "전체 파일 크기가 500MB를 초과합니다.")
             safe_name = _safe_filename(f.filename)
             dest = os.path.join(tmpdir, "ref_" + safe_name)
             with open(dest, "wb") as out:

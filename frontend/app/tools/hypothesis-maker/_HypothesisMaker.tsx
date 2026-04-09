@@ -56,7 +56,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
-const MAX_TOTAL_SIZE = 200 * 1024 * 1024; // 200 MB total
+const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 500 MB total
 
 // ── Copy (i18n) ───────────────────────────────────────────────
 
@@ -248,7 +248,7 @@ function DropZone({
       const combined = [...files, ...pdfs];
       const totalSize = combined.reduce((s, f) => s + f.size, 0);
       if (totalSize > MAX_TOTAL_SIZE) {
-        alert("전체 파일 크기가 200MB를 초과합니다.");
+        alert("전체 파일 크기가 500MB를 초과합니다.");
         return;
       }
       onChange(combined);
