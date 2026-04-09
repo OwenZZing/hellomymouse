@@ -57,6 +57,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
 const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 500 MB total
+const MAX_FILE_COUNT = 20;
 
 // ── Copy (i18n) ───────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ const COPY = {
     modelLabel: "모델",
     providerLabel: "AI 제공자",
     nextBtn: "다음 →",
-    labFilesLabel: "연구실 논문 PDF (필수) — 최근 5년 논문을 모두 올려주세요",
+    labFilesLabel: "연구실 논문 PDF (필수) — 최근 5년 논문을 모두 올려주세요 (최대 20편)",
     refFilesLabel: "교수님 추천 참고 논문 PDF (선택) — 교수님이 별도로 읽어보라고 한 논문",
     dropHint: "PDF 파일을 드래그하거나 클릭해서 선택",
     dropMulti: "여러 파일 동시 선택 가능",
@@ -138,7 +139,7 @@ const COPY = {
     modelLabel: "Model",
     providerLabel: "AI Provider",
     nextBtn: "Next →",
-    labFilesLabel: "Lab papers PDF (required) — upload all papers from the last 5 years",
+    labFilesLabel: "Lab papers PDF (required) — upload all papers from the last 5 years (max 20)",
     refFilesLabel: "Professor-recommended reference PDFs (optional) — papers your PI asked you to read",
     dropHint: "Drag & drop PDF files here or click to select",
     dropMulti: "Multiple files supported",
@@ -254,6 +255,10 @@ function DropZone({
         return;
       }
       const combined = [...files, ...pdfs];
+      if (combined.length > MAX_FILE_COUNT) {
+        alert(`논문은 최대 ${MAX_FILE_COUNT}편까지 업로드할 수 있습니다.`);
+        return;
+      }
       const totalSize = combined.reduce((s, f) => s + f.size, 0);
       if (totalSize > MAX_TOTAL_SIZE) {
         alert("전체 파일 크기가 500MB를 초과합니다.");
