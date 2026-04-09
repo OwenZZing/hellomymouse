@@ -17,6 +17,8 @@ def _client() -> gspread.Client:
         raw = os.environ.get("GOOGLE_CREDENTIALS", "")
         if not raw:
             raise RuntimeError("GOOGLE_CREDENTIALS env var not set")
+        # Railway may insert real newlines — collapse them so JSON parses
+        raw = raw.replace("\n", "\\n").replace("\\\\n", "\\n")
         creds_dict = json.loads(raw)
         creds = Credentials.from_service_account_info(creds_dict, scopes=_SCOPES)
         _gc = gspread.authorize(creds)
