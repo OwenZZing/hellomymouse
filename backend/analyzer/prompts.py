@@ -222,6 +222,24 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
     prof_note = f'\nProfessor\'s additional instructions: {professor_instructions}' if professor_instructions else ''
     field_note = f'Primary research field detected: {detected_field}'
 
+    # Output-budget guardrail: with many papers, paper_summaries alone can
+    # balloon the response and cause JSON truncation. Enforce harder compression.
+    paper_count = len(paper_analyses)
+    if paper_count >= 10:
+        budget_warning = (
+            f"\n\n=== OUTPUT BUDGET CRITICAL ({paper_count} papers) ===\n"
+            "The response token budget is TIGHT. Truncated JSON = total failure.\n"
+            "HARD LIMITS for this run:\n"
+            "- paper_summaries: each of summary / key_finding / limitation = ONE short sentence (max 25 words).\n"
+            "- hypotheses: statement / novelty / rationale / fallback_plan = 1-2 short sentences each, no filler.\n"
+            "- intro_for_undergrad.how_they_study: at most 4 methods.\n"
+            "- lab_capabilities.techniques / equipment_or_models: at most 5 items each.\n"
+            "- costs: at most 6 items.\n"
+            "COMPLETENESS of the full JSON structure (all 7 hypotheses, all required fields closed) is MORE IMPORTANT than prose detail. Prefer terse over verbose. Close every bracket."
+        )
+    else:
+        budget_warning = ""
+
     level_map = {
         "beginner": "a complete beginner (senior undergrad, first time in this research field, no prior research experience). Explain ALL jargon. Timeline estimates must include learning overhead (2-3x base).",
         "intermediate": "an intermediate student (has taken relevant coursework but limited research experience). Explain uncommon jargon. Timeline estimates should be 1.5x base.",
@@ -248,7 +266,7 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
 
 {assigned_note}{prof_note}
 {field_note}
-{level_note}
+{level_note}{budget_warning}
 
 Here are the analyses of all lab papers (and any professor-recommended references):
 {analyses_json}

@@ -231,8 +231,12 @@ class AnalysisPipeline:
         prompt = build_stage2_prompt(paper_analyses, assigned_project,
                                      professor_instructions, detected_field, language,
                                      student_level)
+        # Request a large output budget; api_client clamps to per-model _MAX_TOKENS.
+        # Opus-4.6 caps at 32000, Sonnet-4.6 at 16000. Passing 32000 lets Opus
+        # use its full headroom so the JSON doesn't truncate with 10+ papers.
+        stage2_max_tokens = 32000
         try:
-            response = self.api.call(prompt, system2, max_tokens=16000)
+            response = self.api.call(prompt, system2, max_tokens=stage2_max_tokens)
         finally:
             _stop.set()
 
@@ -246,7 +250,7 @@ class AnalysisPipeline:
                 if attempt == 0:
                     self._progress('JSON 파싱 실패 — 자동 재시도 중...', 72)
                     try:
-                        response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=16000)
+                        response = self.api.call(prompt, system2, max_tokens=stage2_max_tokens)
                     except Exception as retry_err:
                         raise RuntimeError(f'재시도 중 API 오류: {retry_err}')
                 else:
