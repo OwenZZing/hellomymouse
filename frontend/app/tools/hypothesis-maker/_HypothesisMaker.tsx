@@ -50,6 +50,31 @@ const MODELS: Record<Provider, string[]> = {
   gemini: ["gemini-2.5-flash"],
 };
 
+// Per-model output token cap (must mirror backend analyzer/api_client.py::_MAX_TOKENS)
+const MODEL_OUTPUT_CAP: Record<string, number> = {
+  "claude-sonnet-4-6": 64000,
+  "claude-opus-4-6": 32000,
+  "claude-haiku-4-5-20251001": 16000,
+  "claude-3-5-sonnet-20241022": 8192,
+  "gpt-4o": 16384,
+  "gpt-4o-mini": 16384,
+  "gpt-4-turbo": 4096,
+  "o1-mini": 65536,
+  "gemini-2.5-flash": 8192,
+};
+
+// Empirical: Stage 2A output costs ~2000 tokens per paper + ~4000 fixed
+// (hypotheses, intro, capabilities, costs). Returns a safety level so we can
+// warn before the user commits to a long-running analyze job.
+function estimateCapacity(paperCount: number, model: string) {
+  const cap = MODEL_OUTPUT_CAP[model] ?? 8192;
+  const estimated = paperCount * 2000 + 4000;
+  const ratio = estimated / cap;
+  // Max safe paper count for this model (leaves ~15% margin)
+  const maxSafe = Math.max(1, Math.floor((cap * 0.85 - 4000) / 2000));
+  return { cap, estimated, ratio, maxSafe };
+}
+
 const PROVIDER_LABELS: Record<Provider, string> = {
   claude: "Claude (Anthropic)",
   openai: "GPT (OpenAI)",
@@ -102,6 +127,12 @@ const COPY = {
     instrPlaceholder: "예: '교수님이 소프트 로봇 그리퍼 쪽을 맡아보라고 하셨어요' 또는 '특히 에너지 효율 관련 가설을 중점적으로 뽑아주세요'",
     costTitle: "비용 안내",
     costDesc: "논문 5편 기준 약 Claude Sonnet $0.5~1 / GPT-4o $1~2 / Gemini Flash $0.1~0.5",
+    capacityWarnTitle: (n: number, model: string) => `⚠ 논문 ${n}편 × ${model}`,
+    capacityWarnBody: (maxSafe: number) =>
+      `선택한 모델의 출력 한도에 가까워 결과가 잘릴 수 있습니다. 논문을 ${maxSafe}편 이하로 줄이거나 Claude Sonnet 4.6(64K 출력) 사용을 권장합니다.`,
+    capacityDangerTitle: (n: number, model: string) => `🚫 논문 ${n}편 × ${model} — 실패 가능성 높음`,
+    capacityDangerBody: (maxSafe: number) =>
+      `이 조합은 거의 확실하게 출력이 잘립니다. 이전 단계로 돌아가 Claude Sonnet 4.6으로 변경하거나 논문을 ${maxSafe}편 이하로 줄여주세요.`,
     analyzeBtn: "분석 시작 →",
     analyzingTitle: "분석 진행 중...",
     analyzeWait: "Stage 2 (가설 생성) 단계에서 1~3분 소요됩니다. 창을 닫지 마세요.",
@@ -169,6 +200,12 @@ const COPY = {
     instrPlaceholder: "e.g. 'My PI told me to focus on soft robotic grippers' or 'Emphasize energy-efficiency hypotheses'",
     costTitle: "Estimated cost",
     costDesc: "~5 papers: Claude Sonnet $0.5–1 / GPT-4o $1–2 / Gemini Flash $0.1–0.5",
+    capacityWarnTitle: (n: number, model: string) => `⚠ ${n} papers × ${model}`,
+    capacityWarnBody: (maxSafe: number) =>
+      `You're approaching this model's output limit — the JSON response may get truncated. Consider reducing to ${maxSafe} papers or switching to Claude Sonnet 4.6 (64K output).`,
+    capacityDangerTitle: (n: number, model: string) => `🚫 ${n} papers × ${model} — very likely to fail`,
+    capacityDangerBody: (maxSafe: number) =>
+      `This combination will almost certainly truncate. Go back and switch to Claude Sonnet 4.6, or reduce to ${maxSafe} papers or fewer.`,
     analyzeBtn: "Start Analysis →",
     analyzingTitle: "Analysis in progress...",
     analyzeWait: "Stage 2 (hypothesis generation) takes 1–3 minutes. Do not close this window.",
@@ -808,6 +845,36 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
               />
             </div>
+            {/* Capacity warning: raise this before the user commits to a
+                multi-minute analyze job with a too-small model. */}
+            {(() => {
+              const cap = estimateCapacity(labFiles.length, model);
+              if (cap.ratio >= 1.0) {
+                return (
+                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/40">
+                    <p className="text-sm text-red-400 font-semibold mb-1">
+                      {c.capacityDangerTitle(labFiles.length, model)}
+                    </p>
+                    <p className="text-xs text-red-300/80 leading-relaxed">
+                      {c.capacityDangerBody(cap.maxSafe)}
+                    </p>
+                  </div>
+                );
+              }
+              if (cap.ratio >= 0.75) {
+                return (
+                  <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/40">
+                    <p className="text-sm text-amber-400 font-semibold mb-1">
+                      {c.capacityWarnTitle(labFiles.length, model)}
+                    </p>
+                    <p className="text-xs text-amber-300/80 leading-relaxed">
+                      {c.capacityWarnBody(cap.maxSafe)}
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
               <p className="text-xs text-amber-400 font-medium mb-1">{c.costTitle}</p>
               <p className="text-xs text-zinc-500">{c.costDesc}</p>

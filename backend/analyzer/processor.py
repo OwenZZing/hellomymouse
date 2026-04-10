@@ -376,9 +376,9 @@ class AnalysisPipeline:
                                      professor_instructions, detected_field, language,
                                      student_level)
         # Request a large output budget; api_client clamps to per-model _MAX_TOKENS.
-        # Opus-4.6 caps at 32000, Sonnet-4.6 at 16000. Passing 32000 lets Opus
-        # use its full headroom so the JSON doesn't truncate with 10+ papers.
-        stage2_max_tokens = 32000
+        # Sonnet-4.6: 64K, Opus-4.6: 32K, Haiku-4.5: 16K. Passing 64000 lets
+        # Sonnet use its full headroom so 10+ papers don't truncate the JSON.
+        stage2_max_tokens = 64000
 
         response = self._with_keepalive(
             71, 89, stage2_msgs,

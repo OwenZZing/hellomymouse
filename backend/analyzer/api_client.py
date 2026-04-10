@@ -76,17 +76,17 @@ class APIClient:
         max_tokens = min(max_tokens, safe_max)
         return self._call_gemini_with_files(user_prompt, system_prompt, files, max_tokens)
 
-    # Per-model safe output token caps
+    # Per-model safe output token caps (match each model's actual limit)
     _MAX_TOKENS = {
-        # Claude 4
+        # Claude 4.x — Sonnet supports 64K, Opus/Haiku 32K
         'claude-opus-4-6':              32000,
-        'claude-sonnet-4-6':            16000,
+        'claude-sonnet-4-6':            64000,
+        'claude-haiku-4-5-20251001':    16000,
         # Claude 3.5
         'claude-3-5-sonnet-20241022':    8192,
         'claude-3-5-haiku-20241022':     8192,
         # Claude 3
         'claude-3-opus-20240229':        4096,
-        'claude-haiku-4-5-20251001':     8192,
         # OpenAI
         'gpt-4o':                       16384,
         'gpt-4o-mini':                  16384,

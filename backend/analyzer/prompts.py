@@ -223,10 +223,10 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
     field_note = f'Primary research field detected: {detected_field}'
 
     # Output-budget guardrail: with many papers, paper_summaries alone can
-    # balloon the response and cause JSON truncation. Enforce harder compression.
-    # Triggered at 8 papers (Sonnet's 16K cap gets uncomfortably tight ~10+).
+    # balloon the response and cause JSON truncation. Sonnet now gets 64K
+    # output headroom, so this only kicks in for extreme runs (15+ papers).
     paper_count = len(paper_analyses)
-    if paper_count >= 8:
+    if paper_count >= 15:
         budget_warning = (
             f"\n\n=== OUTPUT BUDGET CRITICAL ({paper_count} papers) ===\n"
             "The response token budget is TIGHT. Truncated JSON = total failure.\n"
