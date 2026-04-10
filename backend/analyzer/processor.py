@@ -16,6 +16,7 @@ from analyzer.prompts import (
     STAGE_1_SYSTEM, build_stage1_prompt,
     STAGE_2_SYSTEM, STAGE_2_SYSTEM_EN, build_stage2_prompt,
     STAGE_2B_SYSTEM, STAGE_2B_SYSTEM_EN, build_stage2b_prompt,
+    STAGE_2C_SYSTEM, STAGE_2C_SYSTEM_EN, build_stage2c_prompt,
 )
 
 ProgressCallback = Callable[[str, int], None]
@@ -259,15 +260,17 @@ class AnalysisPipeline:
                         '논문 수를 줄이거나 Claude Sonnet으로 변경해보세요.'
                     )
 
-        self._progress('Stage 2A 완료 — 체크리스트·배경지식·로드맵 생성 중...', 90)
+        self._progress('Stage 2A 완료 — 체크리스트·배경지식·로드맵 생성 중...', 88)
+
+        # Build a compact hypothesis summary used by both 2B and 2C
+        hypo_summary = '\n'.join(
+            f"- {h.get('id','')}: {h.get('name','')} [{h.get('feasibility','')}]"
+            for h in result.get('hypotheses', [])
+        )
 
         # Stage 2B: checklist / background / roadmap (separate smaller call)
         try:
-            hypo_summary = '\n'.join(
-                f"- {h.get('id','')}: {h.get('name','')} [{h.get('feasibility','')}]"
-                for h in result.get('hypotheses', [])
-            )
-            self._progress('Stage 2B: 체크리스트·배경지식·로드맵 생성 중...', 91)
+            self._progress('Stage 2B: 체크리스트·배경지식·로드맵 생성 중...', 89)
             system2b = STAGE_2B_SYSTEM_EN if language == "en" else STAGE_2B_SYSTEM
             prompt2b = build_stage2b_prompt(hypo_summary, detected_field, assigned_project, language)
             response2b = self.api.call(prompt2b, system2b, max_tokens=8192)
@@ -281,7 +284,7 @@ class AnalysisPipeline:
             self._progress(
                 f'Stage 2B 완료: 체크리스트 {len(checklist)}개, '
                 f'개념 {len(bg.get("core_concepts", []))}개, '
-                f'로드맵 {len(roadmap)}개월', 92
+                f'로드맵 {len(roadmap)}개월', 91
             )
         except Exception as e:
             import traceback, os
@@ -291,9 +294,30 @@ class AnalysisPipeline:
                     _f.write(f'[Stage2B ERROR] {e}\n{traceback.format_exc()}\n')
             except Exception:
                 pass
-            self._progress(f'  ⚠ 보조 섹션 생성 실패 — 로그 확인: {e}', 91)
+            self._progress(f'  ⚠ Stage 2B 실패 — 로그 확인: {e}', 91)
 
-        self._progress('Stage 2 완료: 리포트 데이터 생성됨', 92)
+        # Stage 2C: starter tasks (undergraduate-level warmup, grounded in lab context)
+        try:
+            self._progress('Stage 2C: 학부생용 워밍업 과제 생성 중...', 93)
+            system2c = STAGE_2C_SYSTEM_EN if language == "en" else STAGE_2C_SYSTEM
+            prompt2c = build_stage2c_prompt(paper_analyses, hypo_summary, detected_field,
+                                            assigned_project, language)
+            response2c = self.api.call(prompt2c, system2c, max_tokens=6000)
+            result2c = _parse_json_response(response2c)
+            starter_tasks = result2c.get('starter_tasks', [])
+            result['starter_tasks'] = starter_tasks
+            self._progress(f'Stage 2C 완료: 워밍업 과제 {len(starter_tasks)}개 생성', 95)
+        except Exception as e:
+            import traceback, os
+            _log_path = os.path.join(os.path.expanduser('~'), 'HypothesisMaker_debug.log')
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[Stage2C ERROR] {e}\n{traceback.format_exc()}\n')
+            except Exception:
+                pass
+            self._progress(f'  ⚠ Stage 2C 실패 — 가설은 정상 생성됨: {e}', 95)
+
+        self._progress('Stage 2 완료: 리포트 데이터 생성됨', 96)
         return result
 
     # ──────────────────────────────────────────────

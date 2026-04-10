@@ -115,6 +115,7 @@ def build_report(data: dict, output_path: str) -> str:
     bg_knowledge = data.get('background_knowledge', {})
     roadmap = data.get('roadmap', [])
     intro = data.get('intro_for_undergrad', {})
+    starter_tasks = data.get('starter_tasks', [])
 
     # ── Cover ────────────────────────────────────────────────
     _build_cover(doc, lab_name, field)
@@ -137,6 +138,10 @@ def build_report(data: dict, output_path: str) -> str:
 
     # ── Section 2: Paper summaries ───────────────────────────
     _build_section2(doc, paper_summaries)
+
+    # ── STARTER: Undergraduate warmup tasks (pre-hypothesis) ─
+    if starter_tasks:
+        _build_starter_section(doc, starter_tasks)
 
     # ── Section 3: Hypotheses ────────────────────────────────
     _build_section3(doc, hypotheses, assigned_project, projects)
@@ -509,6 +514,112 @@ def _build_section2(doc, paper_summaries):
             for ci in [0, 1, 3, 4, 5]:
                 cell_bg(row[ci], BG_ALT)
     tbl_style(t)
+    doc.add_paragraph()
+
+
+def _build_starter_section(doc, starter_tasks):
+    """🌱 STARTER. 학부생용 기초 워밍업 과제 — 가설 도전 전 디딤돌.
+    intro_for_undergrad 다음, 본격 hypotheses 섹션 앞에 배치."""
+    if not starter_tasks:
+        return
+
+    COLOR_GREEN = (60, 100, 60)
+
+    heading(doc, '🌱 STARTER. 기초 워밍업 과제 — 가설 도전 전 먼저 해볼 것들',
+            level=1, color=COLOR_GREEN)
+
+    intro_body = (
+        '아래 과제들은 연구 경험이 전혀 없는 학부생이 노트북 하나로 혼자서도 '
+        '할 수 있는 "디딤돌" 과제입니다. 완벽한 연구가 아니어도 괜찮습니다 — '
+        'Jupyter 노트북 1개, 요약 문서 1쪽이면 충분합니다. '
+        '이 과제들을 먼저 끝내면, 뒤에 나오는 Research Hypotheses (H1~H7)에 '
+        '겁먹지 않고 자연스럽게 접근할 수 있습니다.'
+    )
+    body(doc, intro_body)
+
+    category_label = {
+        'public_data':      '📊 공개 데이터 분석',
+        'technique_study':  '📚 기법 원리 정리',
+        'data_analysis':    '🔬 데이터 분석 실습',
+        'literature_review': '📖 문헌 정리',
+    }
+
+    for task in starter_tasks:
+        tid = task.get('id', '')
+        name = task.get('name', '')
+        cat = (task.get('category', '') or '').strip()
+        cat_text = category_label.get(cat, cat or '기타')
+
+        # Task title (S1  과제명)
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(10)
+        p.paragraph_format.space_after = Pt(2)
+        r1 = p.add_run(f'{tid}  ')
+        sf(r1, bold=True, size=12, color=COLOR_GREEN)
+        r2 = p.add_run(name)
+        sf(r2, bold=True, size=12)
+
+        # Metadata line: category · difficulty · hours
+        meta_bits = [
+            cat_text,
+            f"난이도: {task.get('difficulty', '-')}",
+            f"예상 시간: {task.get('estimated_hours', '-')}",
+        ]
+        mp = doc.add_paragraph()
+        mp.paragraph_format.left_indent = Pt(12)
+        mp.paragraph_format.space_after = Pt(4)
+        mr = mp.add_run('  ·  '.join(meta_bits))
+        sf(mr, size=9, color=COLOR_MUTED)
+
+        # Field blocks
+        field_blocks = [
+            ('할 일',       task.get('what_to_do', '')),
+            ('왜 도움됨',   task.get('why_it_helps', '')),
+        ]
+        for label, value in field_blocks:
+            if not value:
+                continue
+            fp = doc.add_paragraph()
+            fp.paragraph_format.left_indent = Pt(12)
+            fp.paragraph_format.space_after = Pt(2)
+            fr1 = fp.add_run(f'{label}: ')
+            sf(fr1, bold=True, size=10, color=COLOR_PRIMARY)
+            fr2 = fp.add_run(value)
+            sf(fr2, size=10)
+
+        # Resources (list)
+        resources = task.get('resources', []) or []
+        if resources:
+            rp = doc.add_paragraph()
+            rp.paragraph_format.left_indent = Pt(12)
+            rp.paragraph_format.space_after = Pt(2)
+            rr1 = rp.add_run('📎 자료: ')
+            sf(rr1, bold=True, size=10, color=COLOR_PRIMARY)
+            rr2 = rp.add_run(' · '.join(str(r) for r in resources))
+            sf(rr2, size=10)
+
+        # Deliverable
+        deliverable = task.get('deliverable', '')
+        if deliverable:
+            dp = doc.add_paragraph()
+            dp.paragraph_format.left_indent = Pt(12)
+            dp.paragraph_format.space_after = Pt(2)
+            dr1 = dp.add_run('완성물: ')
+            sf(dr1, bold=True, size=10, color=COLOR_PRIMARY)
+            dr2 = dp.add_run(deliverable)
+            sf(dr2, size=10)
+
+        # Leads to (bridge to hypothesis) — visually distinct
+        leads_to = task.get('leads_to', '')
+        if leads_to:
+            lp = doc.add_paragraph()
+            lp.paragraph_format.left_indent = Pt(12)
+            lp.paragraph_format.space_after = Pt(6)
+            lr1 = lp.add_run('→ 다음 단계: ')
+            sf(lr1, bold=True, size=9, color=COLOR_TREND)
+            lr2 = lp.add_run(leads_to)
+            sf(lr2, size=9, color=COLOR_TREND)
+
     doc.add_paragraph()
 
 

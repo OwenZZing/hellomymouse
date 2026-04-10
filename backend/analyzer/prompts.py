@@ -405,3 +405,162 @@ IMPORTANT: You MUST populate ALL three sections (checklist, background_knowledge
 - search_keywords: minimum 8 keywords
 - recommended_journals: minimum 3 journals
 - roadmap: exactly 3 months, each with at least 3 tasks"""
+
+
+# ─────────────────────────────────────────────────────────────
+# STAGE 2C — Starter tasks (undergraduate-level warmup)
+# ─────────────────────────────────────────────────────────────
+
+STAGE_2C_SYSTEM = """You are a research mentor helping a Korean undergraduate student (or a brand-new research intern) take their very first steps toward research.
+
+Your job: generate 4-6 "Starter Tasks" — doable warmup activities that a student with NO research experience can realistically complete ALONE, using free/public resources. These are stepping stones toward the full research hypotheses, NOT the hypotheses themselves.
+
+=== LANGUAGE RULE ===
+Write ALL descriptive content in Korean (한국어).
+Only these may remain in English: dataset names, library names, technique names, model names, paper titles, URLs, and variable names.
+When a domain-specific term appears for the first time, add a short plain-language explanation in parentheses.
+Assume the reader has never taken a research methods class and doesn't know what "baseline", "hypothesis", or "ablation" means.
+
+=== STARTER TASK RULES (MANDATORY) ===
+
+RULE 1 — ZERO-INFRASTRUCTURE START.
+Tasks must be doable with a personal laptop and free online tools. NO lab equipment, NO advisor supervision, NO paid APIs, NO institutional access required (except arXiv, which is free).
+At least 2 of the tasks must use PUBLIC datasets the student can download TODAY.
+
+RULE 2 — CITE SPECIFIC PUBLIC RESOURCES.
+"Use a public dataset" is BANNED. Every public_data task MUST name a specific dataset with a URL. Examples by field:
+- Neuroscience: Allen Brain Atlas, NeuroMorpho.Org, OpenNeuro, HCP (Human Connectome Project)
+- ML/CV: ImageNet (subset), CIFAR-10, COCO, HuggingFace Datasets Hub
+- Robotics: D4RL, RoboMimic, ROS bag repositories, Isaac Gym tutorials
+- Bioinformatics: NCBI GEO, ENCODE, TCGA, UniProt, PhysioNet
+- General ML: Kaggle, UCI ML Repository, Papers with Code
+Pick datasets that match the LAB's actual field (from the paper analyses).
+
+RULE 3 — JARGON-FREE WHAT-TO-DO.
+The `what_to_do` field must read like a recipe for a first-year undergrad. If you use a term like "convolutional neural network" or "ablation study", IMMEDIATELY follow it with a parenthetical plain-language explanation ("합성곱 신경망 — 이미지를 작은 조각으로 나눠 학습하는 모델").
+
+RULE 4 — CONCRETE DELIVERABLE.
+Every task must produce something the student can SHOW their advisor. Examples:
+- "Jupyter 노트북 1개 + 결과 그래프 3개"
+- "1쪽짜리 기법 요약 문서 (PDF)"
+- "5편 논문 표 형식 정리 (Notion 또는 Word)"
+Vague deliverables like "이해하기" or "공부하기" are BANNED.
+
+RULE 5 — REALISTIC HOURS FOR BEGINNERS.
+Include learning overhead. If installing Python + running first notebook takes a beginner 5 hours, count it. Typical range: 8~30 hours per task.
+
+RULE 6 — BRIDGE TO HYPOTHESES.
+Every task's `leads_to` field must explicitly name which hypothesis (H1~H7) this prepares the student for, and HOW (e.g., "H3의 baseline 재현 실습이 됩니다").
+
+RULE 7 — CATEGORY COVERAGE.
+Use at least 3 different categories from: public_data, technique_study, data_analysis, literature_review.
+At least 2 tasks must be `public_data` (lowest entry barrier — student can start immediately).
+
+Return ONLY valid JSON with no markdown fences, no explanation."""
+
+STAGE_2C_SYSTEM_EN = """You are a research mentor helping an undergraduate student (or brand-new research intern) take their very first steps toward research.
+
+Your job: generate 4-6 "Starter Tasks" — doable warmup activities that a student with NO research experience can realistically complete ALONE, using free/public resources. These are stepping stones toward the full research hypotheses, NOT the hypotheses themselves.
+
+Write ALL content in English. When a domain-specific term appears for the first time, add a short plain-language explanation in parentheses.
+
+=== STARTER TASK RULES ===
+1. ZERO-INFRASTRUCTURE START — personal laptop + free online tools only. At least 2 tasks must use PUBLIC datasets downloadable today.
+2. CITE SPECIFIC RESOURCES — every public_data task must name a specific dataset with URL (Kaggle, UCI ML, HuggingFace, Allen Brain Atlas, ENCODE, etc.), matched to the lab's field.
+3. JARGON-FREE what_to_do — explain every technical term inline in parentheses.
+4. CONCRETE DELIVERABLE — must produce something showable (notebook, PDF summary, table). "Understand X" is banned.
+5. REALISTIC HOURS — include learning overhead (typical: 8-30 hours).
+6. BRIDGE TO HYPOTHESES — leads_to must name which H1~H7 this prepares for, and how.
+7. CATEGORY COVERAGE — use at least 3 categories: public_data, technique_study, data_analysis, literature_review. At least 2 must be public_data.
+
+Return ONLY valid JSON."""
+
+
+def _summarize_lab_context(paper_analyses: list[dict]) -> str:
+    """Extract lab techniques and key terms for grounding Stage 2C."""
+    techniques: list[str] = []
+    seen_tech: set[str] = set()
+    key_terms: list[str] = []
+    seen_term: set[str] = set()
+    paper_types: dict[str, int] = {}
+
+    for p in paper_analyses:
+        for t in p.get('techniques', []) or []:
+            if t and t not in seen_tech:
+                seen_tech.add(t)
+                techniques.append(t)
+        for k in p.get('key_terms', []) or []:
+            if k and k not in seen_term:
+                seen_term.add(k)
+                key_terms.append(k)
+        pt = (p.get('paper_type') or '').strip().lower().split()[0] if p.get('paper_type') else ''
+        if pt:
+            paper_types[pt] = paper_types.get(pt, 0) + 1
+
+    return (
+        f"- Core techniques used by the lab: {', '.join(techniques[:20]) or '(none detected)'}\n"
+        f"- Key domain terms: {', '.join(key_terms[:25]) or '(none detected)'}\n"
+        f"- Paper type distribution: {', '.join(f'{k}×{v}' for k, v in paper_types.items()) or '(unknown)'}"
+    )
+
+
+def build_stage2c_prompt(paper_analyses: list[dict], hypotheses_summary: str,
+                         detected_field: str, assigned_project: str,
+                         language: str = "ko") -> str:
+    lab_context = _summarize_lab_context(paper_analyses)
+    assigned_note = assigned_project or 'General lab research (no specific assignment)'
+
+    if language == "en":
+        task_example = (
+            '{\n'
+            '      "id": "S1",\n'
+            '      "name": "concrete task name",\n'
+            '      "category": "public_data | technique_study | data_analysis | literature_review",\n'
+            '      "difficulty": "undergrad sophomore+ / junior+ / senior+",\n'
+            '      "estimated_hours": "10-15 hours (including setup)",\n'
+            '      "what_to_do": "1-2 sentences — concrete steps, explain jargon in parentheses",\n'
+            '      "why_it_helps": "1 sentence — why this prepares for the hypotheses",\n'
+            '      "resources": ["specific dataset name + URL", "tutorial name + URL"],\n'
+            '      "deliverable": "what the student shows the advisor when done",\n'
+            '      "leads_to": "H? — one line: how this task bridges to that hypothesis"\n'
+            '    }'
+        )
+    else:
+        task_example = (
+            '{\n'
+            '      "id": "S1",\n'
+            '      "name": "구체적 과제명 (한국어)",\n'
+            '      "category": "public_data | technique_study | data_analysis | literature_review",\n'
+            '      "difficulty": "학부 2~3학년 가능 / 4학년 가능 등",\n'
+            '      "estimated_hours": "10~15시간 (환경 설치 포함)",\n'
+            '      "what_to_do": "1~2문장: 구체적 단계, jargon은 괄호로 쉽게 설명 (한국어)",\n'
+            '      "why_it_helps": "1문장: 이 과제가 왜 아래 가설 준비에 도움 되는지",\n'
+            '      "resources": ["구체적 데이터셋/튜토리얼 이름 + URL"],\n'
+            '      "deliverable": "끝나면 손에 남는 것 (예: Jupyter 노트북 + 1쪽 요약 PDF)",\n'
+            '      "leads_to": "H? — 한 줄: 이 과제가 해당 가설과 어떻게 연결되는지"\n'
+            '    }'
+        )
+
+    return f"""Lab context (use this to pick grounded, field-appropriate starter tasks):
+- Primary field: {detected_field}
+- Assigned project: {assigned_note}
+{lab_context}
+
+The full research hypotheses (the DESTINATION these starter tasks must bridge toward):
+{hypotheses_summary}
+
+Generate 4-6 starter tasks for an undergraduate or brand-new research intern. Remember: these tasks are the DIDIMDOL (stepping stones), NOT research itself. Aim for "doable in a few weekends alone with a laptop".
+
+Return ONLY valid JSON (no markdown fences):
+{{
+  "starter_tasks": [
+    {task_example}
+  ]
+}}
+
+HARD REQUIREMENTS:
+- Exactly 4-6 tasks.
+- At least 2 tasks with category "public_data" that cite a specific downloadable dataset (name + URL).
+- At least 3 distinct categories across all tasks.
+- Every task's `leads_to` must name a specific hypothesis id (H1, H2, ..., H7).
+- Every task's `resources` must include at least one specific named resource (dataset, tutorial, paper, library) — no generic "Google it"."""
