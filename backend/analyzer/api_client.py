@@ -112,6 +112,11 @@ class APIClient:
             return self._call_gemini(user_prompt, system_prompt, max_tokens)
 
     def _call_claude(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
+        # Use streaming for ALL Claude calls. Non-streaming requests that may
+        # exceed 10 minutes are rejected by the SDK with:
+        #   "Streaming is required for operations that may take longer than 10 minutes"
+        # This fires on Opus + large Stage 2 inputs (many papers) even though
+        # most requests finish in under a minute. Streaming is safe either way.
         import anthropic
         kwargs = {
             'model': self.model,
@@ -121,8 +126,11 @@ class APIClient:
         if system_prompt:
             kwargs['system'] = system_prompt
         try:
-            response = self._client.messages.create(**kwargs)
-            return response.content[0].text
+            parts: list[str] = []
+            with self._client.messages.stream(**kwargs) as stream:
+                for delta in stream.text_stream:
+                    parts.append(delta)
+            return ''.join(parts)
         except anthropic.AuthenticationError:
             raise ValueError('Claude API 키가 올바르지 않습니다.')
         except anthropic.RateLimitError:
