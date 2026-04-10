@@ -61,6 +61,11 @@ def _parse_json_response(text: str) -> dict:
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
     text = re.sub(r'```\s*$', '', text, flags=re.MULTILINE)
     text = text.strip()
+    # Strip any preamble before the first '{' (Claude sometimes says
+    # "Here's the JSON:" before the actual object).
+    first_brace = text.find('{')
+    if first_brace > 0:
+        text = text[first_brace:]
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
@@ -77,6 +82,29 @@ class AnalysisPipeline:
 
     def _progress(self, msg: str, pct: int):
         self._cb(msg, pct)
+
+    def _with_keepalive(self, start_pct: int, end_pct: int,
+                        msgs: list[str], fn: Callable):
+        """Run fn() with a background thread that slowly advances the progress
+        bar so the frontend doesn't appear frozen during long blocking calls.
+        Critical for Stage 2 — especially the retry path, which previously
+        had no keepalive and appeared stuck at 72% for minutes."""
+        _stop = threading.Event()
+
+        def _keepalive():
+            pct = start_pct
+            while not _stop.is_set() and pct < end_pct:
+                time.sleep(10)
+                if not _stop.is_set():
+                    idx = min((pct - start_pct) // 5, len(msgs) - 1)
+                    self._progress(msgs[idx], pct)
+                    pct += 1
+
+        threading.Thread(target=_keepalive, daemon=True).start()
+        try:
+            return fn()
+        finally:
+            _stop.set()
 
     # ──────────────────────────────────────────────
     # Stage 0: Fast project scan
@@ -206,23 +234,12 @@ class AnalysisPipeline:
         """Synthesize all analyses into final report data."""
         self._progress('Stage 2: 가설 및 리포트 생성 중... (1-3분 소요)', 70)
 
-        # Keepalive: slowly advance progress bar so user knows it's still running
-        _stop = threading.Event()
-        def _keepalive():
-            pct = 71
-            msgs = [
-                'AI가 논문들을 종합 분석 중...',
-                'AI가 연구 가설을 설계 중...',
-                'AI가 평가 지표와 Baseline 작성 중...',
-                'AI가 리포트 구조를 완성 중...',
-            ]
-            while not _stop.is_set() and pct < 89:
-                time.sleep(10)
-                if not _stop.is_set():
-                    msg = msgs[min((pct - 71) // 5, len(msgs) - 1)]
-                    self._progress(msg, pct)
-                    pct += 1
-        threading.Thread(target=_keepalive, daemon=True).start()
+        stage2_msgs = [
+            'AI가 논문들을 종합 분석 중...',
+            'AI가 연구 가설을 설계 중...',
+            'AI가 평가 지표와 Baseline 작성 중...',
+            'AI가 리포트 구조를 완성 중...',
+        ]
 
         # Detect dominant field
         fields = [p.get('field', '') for p in paper_analyses if p.get('field')]
@@ -236,22 +253,32 @@ class AnalysisPipeline:
         # Opus-4.6 caps at 32000, Sonnet-4.6 at 16000. Passing 32000 lets Opus
         # use its full headroom so the JSON doesn't truncate with 10+ papers.
         stage2_max_tokens = 32000
-        try:
-            response = self.api.call(prompt, system2, max_tokens=stage2_max_tokens)
-        finally:
-            _stop.set()
 
-        # Try parsing; if it fails, retry once
+        response = self._with_keepalive(
+            71, 89, stage2_msgs,
+            lambda: self.api.call(prompt, system2, max_tokens=stage2_max_tokens),
+        )
+
+        # Try parsing; if it fails, retry once (retry also runs inside
+        # keepalive so the progress bar keeps moving).
         result = None
         for attempt in range(2):
             try:
                 result = _parse_json_response(response)
                 break
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError):
                 if attempt == 0:
                     self._progress('JSON 파싱 실패 — 자동 재시도 중...', 72)
+                    retry_msgs = [
+                        'AI가 응답을 다시 생성 중...',
+                        '재시도: 가설 구조 재작성 중...',
+                        '재시도: JSON 포맷 정리 중...',
+                    ]
                     try:
-                        response = self.api.call(prompt, system2, max_tokens=stage2_max_tokens)
+                        response = self._with_keepalive(
+                            73, 87, retry_msgs,
+                            lambda: self.api.call(prompt, system2, max_tokens=stage2_max_tokens),
+                        )
                     except Exception as retry_err:
                         raise RuntimeError(f'재시도 중 API 오류: {retry_err}')
                 else:
