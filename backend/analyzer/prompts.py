@@ -224,18 +224,22 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
 
     # Output-budget guardrail: with many papers, paper_summaries alone can
     # balloon the response and cause JSON truncation. Enforce harder compression.
+    # Triggered at 8 papers (Sonnet's 16K cap gets uncomfortably tight ~10+).
     paper_count = len(paper_analyses)
-    if paper_count >= 10:
+    if paper_count >= 8:
         budget_warning = (
             f"\n\n=== OUTPUT BUDGET CRITICAL ({paper_count} papers) ===\n"
             "The response token budget is TIGHT. Truncated JSON = total failure.\n"
             "HARD LIMITS for this run:\n"
-            "- paper_summaries: each of summary / key_finding / limitation = ONE short sentence (max 25 words).\n"
-            "- hypotheses: statement / novelty / rationale / fallback_plan = 1-2 short sentences each, no filler.\n"
-            "- intro_for_undergrad.how_they_study: at most 4 methods.\n"
-            "- lab_capabilities.techniques / equipment_or_models: at most 5 items each.\n"
-            "- costs: at most 6 items.\n"
-            "COMPLETENESS of the full JSON structure (all 7 hypotheses, all required fields closed) is MORE IMPORTANT than prose detail. Prefer terse over verbose. Close every bracket."
+            "- paper_summaries: each of summary / key_finding / limitation = ONE short sentence (max 20 words).\n"
+            "- hypotheses: statement / novelty / rationale / fallback_plan = 1 short sentence each, no filler.\n"
+            "- intro_for_undergrad fields: 1 sentence each; how_they_study: at most 3 methods.\n"
+            "- lab_capabilities.techniques / equipment_or_models: at most 4 items each.\n"
+            "- costs: at most 5 items.\n"
+            "- lab_overview: 2 sentences max.\n"
+            "COMPLETENESS of the full JSON structure (all 7 hypotheses, all required fields closed, all brackets balanced) is FAR MORE IMPORTANT than prose detail. "
+            "If you feel you are running out of budget, cut prose — never leave a field incomplete. "
+            "Return ONLY the JSON object with NO preamble text, NO markdown fences, NO trailing commentary."
         )
     else:
         budget_warning = ""

@@ -23,56 +23,140 @@ ProgressCallback = Callable[[str, int], None]
 
 
 def _recover_truncated_json(text: str) -> dict:
-    """Close unclosed brackets/braces in a truncated JSON string."""
-    stack = []
+    """Recover a truncated/malformed JSON object by backtracking to the last
+    safe cut point and closing open brackets.
+
+    A "safe cut point" is a position where we can chop the string and still
+    produce valid JSON by appending closing brackets:
+      - Right after a closing `}` or `]` (at any depth)
+      - Right BEFORE a `,` at depth >= 1 (drops the incomplete key/value
+        that was being written when truncation happened)
+
+    Snapshots the stack state at each safe cut point, then tries them in
+    reverse order (latest first) until json.loads succeeds.
+    """
+    # Collect (cut_pos_exclusive, stack_at_that_point) for every safe cut.
+    snapshots: list[tuple[int, list[str]]] = []
+    stack: list[str] = []
     in_string = False
     escape = False
-    last_valid_pos = 0
 
     for i, c in enumerate(text):
         if escape:
             escape = False
             continue
-        if c == '\\' and in_string:
-            escape = True
+        if in_string:
+            if c == '\\':
+                escape = True
+            elif c == '"':
+                in_string = False
             continue
+        # not in string
         if c == '"':
-            in_string = not in_string
-            if not in_string:
-                last_valid_pos = i + 1
-        elif not in_string:
-            if c in '{[':
-                stack.append(c)
-            elif c in '}]':
-                if stack:
-                    stack.pop()
-                last_valid_pos = i + 1
+            in_string = True
+        elif c == '{' or c == '[':
+            stack.append(c)
+            # Snapshot right after opening: allows cutting to an empty
+            # container if nothing valid comes after (extreme truncation).
+            snapshots.append((i + 1, list(stack)))
+        elif c == '}' or c == ']':
+            if stack:
+                stack.pop()
+            snapshots.append((i + 1, list(stack)))
+        elif c == ',' and stack:
+            # Cut just before the comma — drops the partial element after it.
+            snapshots.append((i, list(stack)))
 
-    truncated = text[:last_valid_pos]
-    for c in reversed(stack):
-        truncated += '}' if c == '{' else ']'
+    # Also try the full text as-is (in case it was actually valid).
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
 
-    return json.loads(truncated)
+    # Try each snapshot in reverse (prefer the longest recoverable prefix).
+    for cut_pos, snap_stack in reversed(snapshots):
+        candidate = text[:cut_pos]
+        for opener in reversed(snap_stack):
+            candidate += '}' if opener == '{' else ']'
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+    raise json.JSONDecodeError('Could not recover truncated JSON', text[:200], 0)
 
 
 def _parse_json_response(text: str) -> dict:
-    """Strip markdown fences and parse JSON. Falls back to truncation recovery."""
+    """Robustly parse a possibly-noisy LLM JSON response.
+
+    Handles, in order:
+      1. Markdown fences (```json ... ```).
+      2. Preamble/trailing text (e.g. "Here's the JSON: {...} done!").
+      3. Preambles that themselves contain `{` characters — tries each
+         `{` position in the text as a candidate JSON start.
+      4. Truncation (mid-string, mid-value) via _recover_truncated_json
+         backtracking to the last safe cut point.
+    """
+    if not text:
+        raise json.JSONDecodeError('Empty response', '', 0)
+
     text = text.strip()
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
     text = re.sub(r'```\s*$', '', text, flags=re.MULTILINE)
     text = text.strip()
-    # Strip any preamble before the first '{' (Claude sometimes says
-    # "Here's the JSON:" before the actual object).
-    first_brace = text.find('{')
-    if first_brace > 0:
-        text = text[first_brace:]
+
+    # Fast path: entire text is already valid JSON.
     try:
         return json.loads(text)
-    except json.JSONDecodeError as e:
-        # Cut at the error position and close unclosed brackets.
-        # Passing the full text to _recover_truncated_json is wrong:
-        # it would update last_valid_pos past the malformed region.
-        return _recover_truncated_json(text[:e.pos])
+    except json.JSONDecodeError:
+        pass
+
+    decoder = json.JSONDecoder()
+    brace_positions = [i for i, c in enumerate(text) if c == '{']
+    if not brace_positions:
+        raise json.JSONDecodeError('No JSON object found', text[:200], 0)
+
+    # Step 1: Try the FIRST `{` position. This is almost always the real
+    # JSON start. Try raw_decode first (handles trailing text), then
+    # truncation recovery (handles mid-value cuts). Doing this before
+    # trying later `{` positions prevents returning an inner nested
+    # object when the outer object is merely truncated.
+    first_pos = brace_positions[0]
+    first_candidate = text[first_pos:]
+    try:
+        obj, _end = decoder.raw_decode(first_candidate)
+        if isinstance(obj, dict) and obj:
+            return obj
+    except json.JSONDecodeError:
+        pass
+    try:
+        recovered = _recover_truncated_json(first_candidate)
+        if recovered:  # non-empty: trust it
+            return recovered
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Step 2: The first `{` was probably preamble junk (e.g. "{ literal }"
+    # in prose). Try later `{` positions with raw_decode. This correctly
+    # finds the real JSON when it comes after a brace-containing preamble.
+    for pos in brace_positions[1:]:
+        candidate = text[pos:]
+        try:
+            obj, _end = decoder.raw_decode(candidate)
+            if isinstance(obj, dict) and obj:
+                return obj
+        except json.JSONDecodeError:
+            continue
+
+    # Step 3: Absolute last resort — accept an empty dict from recovery
+    # so callers don't crash (they can still try again, and the .get()
+    # pattern won't KeyError).
+    try:
+        return _recover_truncated_json(first_candidate)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    raise json.JSONDecodeError('Could not parse JSON response', text[:200], 0)
 
 
 class AnalysisPipeline:
@@ -82,6 +166,48 @@ class AnalysisPipeline:
 
     def _progress(self, msg: str, pct: int):
         self._cb(msg, pct)
+
+    def _log_parse_failure(self, tag: str, response: str, err: Exception):
+        """Write the failing response + error to a debug log for diagnosis."""
+        try:
+            _log_path = os.path.join(os.path.expanduser('~'), 'HypothesisMaker_debug.log')
+            resp_len = len(response) if response else 0
+            head = (response or '')[:1500]
+            tail = (response or '')[-1500:] if resp_len > 3000 else ''
+            with open(_log_path, 'a', encoding='utf-8') as f:
+                f.write(f'\n========== [{tag}] PARSE FAILURE ==========\n')
+                f.write(f'provider={self.api.provider} model={self.api.model}\n')
+                f.write(f'response_length={resp_len}\n')
+                f.write(f'error={err}\n')
+                f.write(f'--- response head (first 1500 chars) ---\n{head}\n')
+                if tail:
+                    f.write(f'--- response tail (last 1500 chars) ---\n{tail}\n')
+                f.write('========== END ==========\n')
+        except Exception:
+            pass  # Never let logging kill the pipeline
+
+    def _format_parse_failure_message(self) -> str:
+        """User-facing message for Stage 2 parse failure — suggest alternative
+        models that exclude the one the user is already on."""
+        provider = (self.api.provider or '').lower()
+        model = (self.api.model or '').lower()
+
+        # Build an alternatives list that excludes the current provider/model
+        alternatives: list[str] = []
+        if provider != 'claude' or 'opus' not in model:
+            alternatives.append('Claude Opus')
+        if provider != 'claude' or 'sonnet' not in model:
+            alternatives.append('Claude Sonnet')
+        if provider != 'openai':
+            alternatives.append('GPT-4o')
+        if provider != 'gemini':
+            alternatives.append('Gemini 2.5 Pro')
+
+        alt_str = ' / '.join(alternatives[:3]) if alternatives else '다른 모델'
+        return (
+            'AI가 올바른 JSON 형식으로 응답하지 않았습니다. '
+            f'논문 수를 줄이거나 다른 모델({alt_str})을 사용해보세요.'
+        )
 
     def _with_keepalive(self, start_pct: int, end_pct: int,
                         msgs: list[str], fn: Callable):
@@ -259,14 +385,17 @@ class AnalysisPipeline:
             lambda: self.api.call(prompt, system2, max_tokens=stage2_max_tokens),
         )
 
-        # Try parsing; if it fails, retry once (retry also runs inside
-        # keepalive so the progress bar keeps moving).
+        # Try parsing; if it fails, retry once with a stronger concision
+        # directive. Retry also runs inside keepalive so progress keeps moving.
         result = None
         for attempt in range(2):
             try:
                 result = _parse_json_response(response)
                 break
-            except (json.JSONDecodeError, ValueError):
+            except (json.JSONDecodeError, ValueError) as parse_err:
+                # Log the failing response so we can diagnose bad outputs.
+                self._log_parse_failure(f'Stage2A attempt {attempt + 1}',
+                                        response, parse_err)
                 if attempt == 0:
                     self._progress('JSON 파싱 실패 — 자동 재시도 중...', 72)
                     retry_msgs = [
@@ -274,18 +403,32 @@ class AnalysisPipeline:
                         '재시도: 가설 구조 재작성 중...',
                         '재시도: JSON 포맷 정리 중...',
                     ]
+                    # Stronger retry: prepend a critical notice that forces
+                    # JSON-only, terse output so the second attempt is more
+                    # likely to produce parseable, non-truncated JSON.
+                    retry_system = system2 + (
+                        "\n\n=== CRITICAL RETRY NOTICE ===\n"
+                        "Your previous response FAILED to parse as valid JSON. "
+                        "This is your FINAL attempt. Obey these rules strictly:\n"
+                        "1. Return ONLY the JSON object. Start with `{` and end with `}`.\n"
+                        "2. NO preamble text, NO 'Here is the JSON', NO markdown fences, NO explanations.\n"
+                        "3. Every field MUST be a SINGLE short sentence. No multi-paragraph prose.\n"
+                        "4. COMPLETENESS of the JSON structure (every bracket closed, every field present) is more important than prose quality.\n"
+                        "5. Escape all `\"` inside string values as `\\\"`. Do not use unescaped quotes inside strings.\n"
+                        "6. Do not exceed 12000 output tokens. Compress aggressively if needed."
+                    )
                     try:
                         response = self._with_keepalive(
                             73, 87, retry_msgs,
-                            lambda: self.api.call(prompt, system2, max_tokens=stage2_max_tokens),
+                            lambda: self.api.call(prompt, retry_system,
+                                                  max_tokens=stage2_max_tokens),
                         )
                     except Exception as retry_err:
                         raise RuntimeError(f'재시도 중 API 오류: {retry_err}')
                 else:
-                    raise RuntimeError(
-                        'AI가 올바른 형식으로 응답하지 않았습니다. '
-                        '논문 수를 줄이거나 Claude Sonnet으로 변경해보세요.'
-                    )
+                    # Both attempts failed. Suggest model alternatives that
+                    # exclude whatever the user is already on.
+                    raise RuntimeError(self._format_parse_failure_message())
 
         self._progress('Stage 2A 완료 — 체크리스트·배경지식·로드맵 생성 중...', 88)
 
