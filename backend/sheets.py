@@ -57,10 +57,11 @@ def delete_review(row_index: int):
 
 # ── Widget (Stairs) ──────────────────────────────────────────
 
-_WIDGET_HEADERS = ["date", "stairs", "button_count", "usage_count"]
+_WIDGET_HEADERS = ["date", "stairs", "button_count", "usage_count", "view_count"]
 
 
-def save_widget(date: str, stairs: int, button_count: int, usage_count: int = 0):
+def save_widget(date: str, stairs: int, button_count: int,
+                usage_count: int = 0, view_count: int = 0):
     ws = _sheet("Stairs")
     if not ws.row_values(1):
         ws.append_row(_WIDGET_HEADERS)
@@ -71,28 +72,38 @@ def save_widget(date: str, stairs: int, button_count: int, usage_count: int = 0)
             ws.update_cell(i, 2, stairs)
             ws.update_cell(i, 3, button_count)
             ws.update_cell(i, 4, usage_count)
+            ws.update_cell(i, 5, view_count)
             return
-    ws.append_row([date, stairs, button_count, usage_count])
+    ws.append_row([date, stairs, button_count, usage_count, view_count])
+
+
+def _max_col_value(rows: list[list[str]], col_index: int) -> int:
+    """Return the max int value found in col_index (0-based) across data rows."""
+    best = 0
+    for r in rows[1:]:
+        if len(r) > col_index and r[col_index]:
+            try:
+                best = max(best, int(r[col_index]))
+            except ValueError:
+                pass
+    return best
 
 
 def get_widget() -> dict:
     ws = _sheet("Stairs")
     rows = ws.get_all_values()
     if len(rows) <= 1:
-        return {"stairs": 0, "button_count": 0, "last_updated": "", "usage_count": 0}
-    # usage_count is cumulative — scan all rows so old rows without the
-    # 4th column (pre-migration) don't reset the total.
-    max_usage = 0
-    for r in rows[1:]:
-        if len(r) > 3 and r[3]:
-            try:
-                max_usage = max(max_usage, int(r[3]))
-            except ValueError:
-                pass
+        return {"stairs": 0, "button_count": 0, "last_updated": "",
+                "usage_count": 0, "view_count": 0}
+    # usage_count / view_count are cumulative — scan all rows so pre-migration
+    # rows (missing the new columns) don't reset the totals.
+    max_usage = _max_col_value(rows, 3)
+    max_views = _max_col_value(rows, 4)
     last = rows[-1]
     return {
         "stairs": int(last[1]) if last[1] else 0,
         "button_count": int(last[2]) if len(last) > 2 and last[2] else 0,
         "last_updated": last[0],
         "usage_count": max_usage,
+        "view_count": max_views,
     }

@@ -37,6 +37,41 @@ function AvgRating() {
   );
 }
 
+function ViewCounter() {
+  const [views, setViews] = useState<number | null>(null);
+
+  useEffect(() => {
+    const key = "hmm_view_counted";
+    const alreadyCounted = sessionStorage.getItem(key);
+
+    const readOnly = () =>
+      fetch(`${API_URL}/api/widget`)
+        .then((r) => r.json())
+        .then((d) => setViews(d.view_count ?? 0))
+        .catch(() => {});
+
+    if (alreadyCounted) {
+      readOnly();
+    } else {
+      fetch(`${API_URL}/api/widget/view`, { method: "POST" })
+        .then((r) => r.json())
+        .then((d) => {
+          sessionStorage.setItem(key, "1");
+          setViews(d.view_count ?? 0);
+        })
+        .catch(readOnly);
+    }
+  }, []);
+
+  if (views === null || views === 0) return null;
+  return (
+    <span className="text-zinc-700">
+      {" · "}
+      {views.toLocaleString()} views
+    </span>
+  );
+}
+
 function UsageCount() {
   const [count, setCount] = useState<number | null>(null);
 
@@ -276,6 +311,7 @@ export default function HomeEN() {
       <footer className="mt-6 pt-4 border-t border-zinc-800">
         <p className="text-zinc-600 text-sm font-mono">
           © {new Date().getFullYear()} Hellomymouse
+          <ViewCounter />
         </p>
       </footer>
     </main>

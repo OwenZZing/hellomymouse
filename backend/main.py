@@ -374,7 +374,13 @@ async def download(job_id: str):
 from datetime import datetime, timezone
 
 # In-memory cache for widget (reduces Sheets API calls)
-_widget_cache: dict = {"stairs": 0, "button_count": 0, "last_updated": "", "usage_count": 0}
+_widget_cache: dict = {
+    "stairs": 0,
+    "button_count": 0,
+    "last_updated": "",
+    "usage_count": 0,
+    "view_count": 0,
+}
 _widget_loaded = False
 
 
@@ -399,6 +405,18 @@ class StairsBody(BaseModel):
     secret: str = ""
 
 
+def _save_widget_all():
+    """Persist current widget cache to Sheets using today's date."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    sheets.save_widget(
+        today,
+        _widget_cache.get("stairs", 0),
+        _widget_cache.get("button_count", 0),
+        _widget_cache.get("usage_count", 0),
+        _widget_cache.get("view_count", 0),
+    )
+
+
 @app.post("/api/widget/stairs")
 async def update_stairs(body: StairsBody):
     if body.secret != os.environ.get("WIDGET_SECRET", "hellomymouse"):
@@ -408,8 +426,7 @@ async def update_stairs(body: StairsBody):
     _widget_cache["stairs"] = body.count
     _widget_cache["last_updated"] = today
     try:
-        sheets.save_widget(today, body.count, _widget_cache["button_count"],
-                           _widget_cache.get("usage_count", 0))
+        _save_widget_all()
     except Exception as e:
         print(f"[sheets] save_widget failed: {e}")
     return _widget_cache
@@ -419,13 +436,25 @@ async def update_stairs(body: StairsBody):
 async def press_button():
     _load_widget()
     _widget_cache["button_count"] += 1
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
-        sheets.save_widget(today, _widget_cache["stairs"], _widget_cache["button_count"],
-                           _widget_cache.get("usage_count", 0))
+        _save_widget_all()
     except Exception as e:
         print(f"[sheets] save_widget failed: {e}")
     return {"button_count": _widget_cache["button_count"]}
+
+
+@app.post("/api/widget/view")
+async def record_view():
+    """Increment the cumulative homepage view counter.
+    Frontend is expected to gate this per session (sessionStorage) to avoid
+    refresh-spam inflation."""
+    _load_widget()
+    _widget_cache["view_count"] = _widget_cache.get("view_count", 0) + 1
+    try:
+        _save_widget_all()
+    except Exception as e:
+        print(f"[sheets] view increment failed: {e}")
+    return {"view_count": _widget_cache["view_count"]}
 
 
 def _increment_usage_count():
@@ -433,10 +462,7 @@ def _increment_usage_count():
     try:
         _load_widget()
         _widget_cache["usage_count"] = _widget_cache.get("usage_count", 0) + 1
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        sheets.save_widget(today, _widget_cache.get("stairs", 0),
-                           _widget_cache.get("button_count", 0),
-                           _widget_cache["usage_count"])
+        _save_widget_all()
     except Exception as e:
         print(f"[sheets] usage increment failed: {e}")
 
