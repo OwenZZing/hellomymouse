@@ -236,6 +236,8 @@ async def start_analysis(body: AnalyzeBody):
             jobs[job_id]["result_data"] = result
             jobs[job_id]["result_path"] = output_path
             jobs[job_id]["filename"] = filename
+            # Count this as one successful use (cumulative counter, Sheets-backed)
+            _increment_usage_count()
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 {"message": "리포트 생성 완료!", "percent": 100, "done": True},
@@ -372,7 +374,7 @@ async def download(job_id: str):
 from datetime import datetime, timezone
 
 # In-memory cache for widget (reduces Sheets API calls)
-_widget_cache: dict = {"stairs": 0, "button_count": 0, "last_updated": ""}
+_widget_cache: dict = {"stairs": 0, "button_count": 0, "last_updated": "", "usage_count": 0}
 _widget_loaded = False
 
 
@@ -406,7 +408,8 @@ async def update_stairs(body: StairsBody):
     _widget_cache["stairs"] = body.count
     _widget_cache["last_updated"] = today
     try:
-        sheets.save_widget(today, body.count, _widget_cache["button_count"])
+        sheets.save_widget(today, body.count, _widget_cache["button_count"],
+                           _widget_cache.get("usage_count", 0))
     except Exception as e:
         print(f"[sheets] save_widget failed: {e}")
     return _widget_cache
@@ -418,10 +421,24 @@ async def press_button():
     _widget_cache["button_count"] += 1
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
-        sheets.save_widget(today, _widget_cache["stairs"], _widget_cache["button_count"])
+        sheets.save_widget(today, _widget_cache["stairs"], _widget_cache["button_count"],
+                           _widget_cache.get("usage_count", 0))
     except Exception as e:
         print(f"[sheets] save_widget failed: {e}")
     return {"button_count": _widget_cache["button_count"]}
+
+
+def _increment_usage_count():
+    """Bump the cumulative hypothesis-maker usage counter. Safe to fail silently."""
+    try:
+        _load_widget()
+        _widget_cache["usage_count"] = _widget_cache.get("usage_count", 0) + 1
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        sheets.save_widget(today, _widget_cache.get("stairs", 0),
+                           _widget_cache.get("button_count", 0),
+                           _widget_cache["usage_count"])
+    except Exception as e:
+        print(f"[sheets] usage increment failed: {e}")
 
 
 if __name__ == "__main__":

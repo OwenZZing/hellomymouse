@@ -39,6 +39,29 @@ function AvgRating() {
   );
 }
 
+// ── Usage count (누적 사용자) ─────────────────────────────────
+
+function UsageCount() {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/widget`)
+      .then((r) => r.json())
+      .then((d) => setCount(d.usage_count ?? 0))
+      .catch(() => {});
+  }, []);
+
+  if (count === null || count === 0) return null;
+
+  return (
+    <p className="text-xs text-zinc-500 mt-3 font-mono">
+      지금까지{" "}
+      <span className="text-violet-400 font-semibold">{count.toLocaleString()}</span>
+      명이 사용했습니다!
+    </p>
+  );
+}
+
 // ── Tools ─────────────────────────────────────────────────────
 
 const tools = [
@@ -260,6 +283,7 @@ export default function Home() {
                   </div>
                   {tool.slug === "hypothesis-maker" && <AvgRating />}
                 </div>
+                {tool.slug === "hypothesis-maker" && <UsageCount />}
               </Link>
             ) : (
               <div

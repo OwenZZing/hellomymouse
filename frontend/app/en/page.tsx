@@ -37,6 +37,27 @@ function AvgRating() {
   );
 }
 
+function UsageCount() {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/widget`)
+      .then((r) => r.json())
+      .then((d) => setCount(d.usage_count ?? 0))
+      .catch(() => {});
+  }, []);
+
+  if (count === null || count === 0) return null;
+
+  return (
+    <p className="text-xs text-zinc-500 mt-3 font-mono">
+      Used by{" "}
+      <span className="text-violet-400 font-semibold">{count.toLocaleString()}</span>{" "}
+      {count === 1 ? "person" : "people"} so far!
+    </p>
+  );
+}
+
 const tools = [
   {
     slug: "hypothesis-maker",
@@ -232,6 +253,7 @@ export default function HomeEN() {
                   </div>
                   {tool.slug === "hypothesis-maker" && <AvgRating />}
                 </div>
+                {tool.slug === "hypothesis-maker" && <UsageCount />}
               </Link>
             ) : (
               <div
