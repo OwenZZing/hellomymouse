@@ -445,16 +445,17 @@ async def press_button():
 
 @app.post("/api/widget/view")
 async def record_view():
-    """Increment the cumulative homepage view counter.
-    Frontend is expected to gate this per session (sessionStorage) to avoid
-    refresh-spam inflation."""
+    """Increment the cumulative homepage view counter and return the full
+    widget state in one call (so the frontend can render stairs + views from
+    a single request). Frontend is expected to gate this per session
+    (sessionStorage) to avoid refresh-spam inflation."""
     _load_widget()
     _widget_cache["view_count"] = _widget_cache.get("view_count", 0) + 1
     try:
         _save_widget_all()
     except Exception as e:
         print(f"[sheets] view increment failed: {e}")
-    return {"view_count": _widget_cache["view_count"]}
+    return _widget_cache
 
 
 def _increment_usage_count():

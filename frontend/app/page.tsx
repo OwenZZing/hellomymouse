@@ -39,43 +39,6 @@ function AvgRating() {
   );
 }
 
-// ── View counter (홈페이지 조회수) ──────────────────────────
-
-function ViewCounter() {
-  const [views, setViews] = useState<number | null>(null);
-
-  useEffect(() => {
-    const key = "hmm_view_counted";
-    const alreadyCounted = sessionStorage.getItem(key);
-
-    const readOnly = () =>
-      fetch(`${API_URL}/api/widget`)
-        .then((r) => r.json())
-        .then((d) => setViews(d.view_count ?? 0))
-        .catch(() => {});
-
-    if (alreadyCounted) {
-      readOnly();
-    } else {
-      fetch(`${API_URL}/api/widget/view`, { method: "POST" })
-        .then((r) => r.json())
-        .then((d) => {
-          sessionStorage.setItem(key, "1");
-          setViews(d.view_count ?? 0);
-        })
-        .catch(readOnly);
-    }
-  }, []);
-
-  if (views === null || views === 0) return null;
-  return (
-    <span className="text-zinc-700">
-      {" · "}
-      {views.toLocaleString()} views
-    </span>
-  );
-}
-
 // ── Usage count (누적 사용자) ─────────────────────────────────
 
 function UsageCount() {
@@ -180,16 +143,47 @@ function RecentCommits() {
 function StairWidget() {
   const [stairs, setStairs] = useState<number | null>(null);
   const [buttonCount, setButtonCount] = useState(0);
+  const [views, setViews] = useState<number | null>(null);
   const [pressed, setPressed] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/widget`)
-      .then((r) => r.json())
-      .then((d) => {
-        setStairs(d.stairs);
-        setButtonCount(d.button_count);
-      })
-      .catch(() => {});
+    const key = "hmm_view_counted";
+    const alreadyCounted = sessionStorage.getItem(key);
+
+    type WidgetData = {
+      stairs?: number;
+      button_count?: number;
+      view_count?: number;
+    };
+
+    const apply = (d: WidgetData) => {
+      setStairs(d.stairs ?? 0);
+      setButtonCount(d.button_count ?? 0);
+      setViews(d.view_count ?? 0);
+    };
+
+    if (alreadyCounted) {
+      fetch(`${API_URL}/api/widget`)
+        .then((r) => r.json())
+        .then(apply)
+        .catch(() => {});
+    } else {
+      // First visit this session: POST increments view_count and returns
+      // the full widget state in one call.
+      fetch(`${API_URL}/api/widget/view`, { method: "POST" })
+        .then((r) => r.json())
+        .then((d) => {
+          sessionStorage.setItem(key, "1");
+          apply(d);
+        })
+        .catch(() => {
+          // Fallback: at least show the current state without counting.
+          fetch(`${API_URL}/api/widget`)
+            .then((r) => r.json())
+            .then(apply)
+            .catch(() => {});
+        });
+    }
   }, []);
 
   const handlePress = async () => {
@@ -202,7 +196,16 @@ function StairWidget() {
   return (
     <div className="mb-10 px-4 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3 flex-wrap">
       <p className="text-sm text-zinc-400 font-mono">
-        🐭 오늘 오른 계단 <span className="text-zinc-100 font-bold">{stairs === null ? "-" : stairs === 0 ? "아직 0층 🥲" : `${stairs}층`}</span>
+        🐭 오늘 오른 계단{" "}
+        <span className="text-zinc-100 font-bold">
+          {stairs === null ? "-" : stairs === 0 ? "아직 0층 🥲" : `${stairs}층`}
+        </span>
+        {views !== null && views > 0 && (
+          <span className="text-zinc-600">
+            {"  ·  "}
+            <span className="text-zinc-400">👀 {views.toLocaleString()} views</span>
+          </span>
+        )}
       </p>
       <div className="flex items-center gap-2">
         <button
@@ -344,7 +347,6 @@ export default function Home() {
       <footer className="mt-6 pt-4 border-t border-zinc-800">
         <p className="text-zinc-600 text-sm font-mono">
           © {new Date().getFullYear()} Hellomymouse
-          <ViewCounter />
         </p>
       </footer>
     </main>
