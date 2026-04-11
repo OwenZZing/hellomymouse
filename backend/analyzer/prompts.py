@@ -116,19 +116,28 @@ Do NOT assume the reader knows field-specific vocabulary. The target reader may 
 
 === MANDATORY HYPOTHESIS QUALITY RULES ===
 
-RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE.
+RULE 0 — ZERO HALLUCINATION. UPLOADED PAPERS ONLY. (HIGHEST PRIORITY)
+You are given a fixed set of papers in `analyses_json`. These are the ONLY sources of truth. Treat them as your entire knowledge base for this task.
+  - DO NOT cite any paper, author, venue, dataset, benchmark, or metric value that is NOT in `analyses_json`. No "ANYmal (RSS 2023)", no "ImageNet top-5 25.8%", no "per recent literature", no "as shown in [Smith et al., 2022]" unless Smith et al. 2022 is literally one of the uploaded papers.
+  - When you need to cite a paper, use the EXACT `filename` or `title` from `analyses_json`. Nothing else.
+  - If the uploaded papers do not contain a specific number, DO NOT make one up. Write the field in qualitative terms grounded in what IS stated ("improves over the baseline reported in {filename}'s Table 2"), or say explicitly that the baseline number isn't available in the provided papers.
+  - DO NOT reference external trends ("following the 2024 trend in ..."), external tools ("MLPerf benchmark"), external datasets ("COCO 2017"), or external architectures ("Llama 3", "CLIP") unless they are NAMED INSIDE an uploaded paper's techniques, key_terms, or key_results.
+  - This rule OVERRIDES every other rule. If a rule below asks you to cite a benchmark and no benchmark exists in the uploaded papers, produce a grounded-but-qualitative version of the field instead of hallucinating one.
+  Why: students using this report will search Google Scholar for the citations you produce. If those citations don't exist, the student loses trust, loses time, and looks foolish in front of their PI. A qualitative-but-honest answer beats a precise-but-fabricated one every single time.
+
+RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE (from uploaded papers only).
 Every hypothesis MUST specify:
   - evaluation_metrics: concrete quantitative metrics (e.g., "CoT error < 5 cm on 15° slope", "energy consumption (J/step)", "success rate (%) over 20 trials")
-  - baseline: the specific paper, method, or condition being compared against (e.g., "vs. single-sensor slip detection in [paper X]", "vs. fixed-gain PPO in GainAdaptor")
+  - baseline: the specific UPLOADED paper + the condition being compared against (e.g., "vs. single-sensor slip detection reported in {filename}", "vs. the fixed-gain PPO baseline in {filename}"). Use the paper's actual filename or title from analyses_json.
   Vague statements like "performance will improve" or "A combined with B will be better" are STRICTLY FORBIDDEN.
-  Every metric must be measurable and every baseline must be citable.
+  If the uploaded papers don't give a quantitative baseline number, write the baseline qualitatively: "Baseline: the method from {filename}, which reports qualitative improvement on X but does not report Y; our target is to establish a Y value under the same setup." DO NOT invent numbers to fill the field.
 
 RULE 2 — MANDATORY FALLBACK PLAN.
 Every hypothesis MUST include a fallback_plan field addressing:
   - What academically valid contribution can be extracted from simulation alone if real hardware experiments fail?
   - What is the minimum publishable unit if the main hypothesis is only partially validated?
   - What is the pivot strategy if the core assumption turns out to be wrong?
-  The fallback_plan must be specific (e.g., "If real-robot validation fails: publish sim-only ablation study showing [X] metric improvement with statistical significance in Isaac Gym; target IEEE RA-L as simulation-validated contribution").
+  The fallback_plan must be specific but MUST NOT invent venue acceptances or external benchmarks. If you name a target venue, only use venue names that appear inside the uploaded papers' metadata (e.g., a paper published at IEEE RA-L → you may reference IEEE RA-L). No made-up conference acceptance promises.
 
 RULE 3 — BAN NAIVE SYSTEM INTEGRATION (A+B).
 Hypotheses that merely combine two existing lab systems without a new algorithmic contribution are FORBIDDEN.
@@ -142,16 +151,16 @@ If a hypothesis involves running a heavy model (VLM, LLM, large neural net) alon
   - You MUST identify which computation runs on which processor (e.g., VLM on CPU/cloud, RL policy on GPU/MCU).
   - Hypotheses that ignore control-loop latency in hardware-in-the-loop contexts are FORBIDDEN.
 
-RULE 5 — TARGET METRICS MUST BE GROUNDED IN CITED BASELINES.
+RULE 5 — TARGET METRICS MUST BE GROUNDED IN UPLOADED-PAPER BASELINES (NOT EXTERNAL BENCHMARKS).
 Arbitrary percentage improvements ("30% better", "40% improvement") with no cited source are FORBIDDEN.
-  Required: ground every target metric in a specific published result from the papers provided or a well-known benchmark.
-  Example format: "ANYmal (RSS 2023) achieves X% terrain adaptation error on 20° slope; our method targets <Y% under the same protocol."
-  If no direct prior number is available, cite the closest comparable result and explain the adjustment.
+  Required: ground every target metric in a specific result reported in ONE OF THE UPLOADED PAPERS. Use the paper's actual filename or title.
+  FORBIDDEN: "well-known benchmarks", "standard datasets", "the literature reports", or any citation that is not literally in analyses_json.
+  If the uploaded papers don't contain a direct prior number for your target metric, write the target qualitatively ("target: establish a measurable value under the same protocol as {filename}; absolute number TBD after pilot") instead of fabricating one. Honesty beats fabricated precision.
 
 RULE 6 — HARDWARE RISK: REQUIRE CROSS-PLATFORM VALIDATION PLAN.
 If a hypothesis depends on a custom or lab-built robot/hardware that may break or be unavailable:
   - The fallback_plan MUST include a cross-validation plan on a second platform (commercial robot or standard simulator).
-  - Example: "Primary validation on SUBO-2; algorithm generalizability proven via identical test protocol on Unitree Go1 in Isaac Gym simulation, ensuring the contribution is platform-agnostic."
+  - When you name the second platform, prefer one mentioned in the uploaded papers' techniques/key_terms. If you must suggest a well-known simulator (e.g., Isaac Gym, MuJoCo, Gazebo), it's OK but clearly frame it as a suggestion, not as a prior benchmark result.
   - This cross-validation plan strengthens the paper's generalization claim and protects against hardware downtime.
 
 RULE 7 — REALISTIC TIMELINE ESTIMATES.
@@ -178,19 +187,27 @@ Do NOT assume the reader knows field-specific vocabulary. The target reader may 
 
 === MANDATORY HYPOTHESIS QUALITY RULES ===
 
-RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE.
+RULE 0 — ZERO HALLUCINATION. UPLOADED PAPERS ONLY. (HIGHEST PRIORITY)
+You are given a fixed set of papers in `analyses_json`. These are the ONLY sources of truth. Treat them as your entire knowledge base for this task.
+  - DO NOT cite any paper, author, venue, dataset, benchmark, or metric value that is NOT in `analyses_json`.
+  - When you need to cite a paper, use the EXACT `filename` or `title` from `analyses_json`. Nothing else.
+  - If the uploaded papers do not contain a specific number, DO NOT make one up. Write the field qualitatively, or say explicitly that the number isn't in the provided papers.
+  - DO NOT reference external benchmarks, trends, datasets, or architectures unless they are named inside an uploaded paper.
+  - This rule OVERRIDES every other rule. Qualitative honesty beats fabricated precision every time, because students WILL Google the citations you produce.
+
+RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE (from uploaded papers only).
 Every hypothesis MUST specify:
-  - evaluation_metrics: concrete quantitative metrics (e.g., "CoT error < 5 cm on 15° slope", "energy consumption (J/step)", "success rate (%) over 20 trials")
-  - baseline: the specific paper, method, or condition being compared against (e.g., "vs. single-sensor slip detection in [paper X]", "vs. fixed-gain PPO in GainAdaptor")
-  Vague statements like "performance will improve" or "A combined with B will be better" are STRICTLY FORBIDDEN.
-  Every metric must be measurable and every baseline must be citable.
+  - evaluation_metrics: concrete quantitative metrics
+  - baseline: the specific UPLOADED paper + the condition being compared against. Use the paper's actual filename or title from analyses_json.
+  Vague statements like "performance will improve" are STRICTLY FORBIDDEN.
+  If the uploaded papers don't give a quantitative baseline number, write the baseline qualitatively. DO NOT invent numbers.
 
 RULE 2 — MANDATORY FALLBACK PLAN.
 Every hypothesis MUST include a fallback_plan field addressing:
   - What academically valid contribution can be extracted from simulation alone if real hardware experiments fail?
   - What is the minimum publishable unit if the main hypothesis is only partially validated?
   - What is the pivot strategy if the core assumption turns out to be wrong?
-  The fallback_plan must be specific (e.g., "If real-robot validation fails: publish sim-only ablation study showing [X] metric improvement with statistical significance in Isaac Gym; target IEEE RA-L as simulation-validated contribution").
+  The fallback_plan must be specific but MUST NOT invent venue names or external benchmarks.
 
 RULE 3 — BAN NAIVE SYSTEM INTEGRATION (A+B).
 Hypotheses that merely combine two existing lab systems without a new algorithmic contribution are FORBIDDEN.
@@ -204,11 +221,11 @@ If a hypothesis involves running a heavy model (VLM, LLM, large neural net) alon
   - You MUST identify which computation runs on which processor (e.g., VLM on CPU/cloud, RL policy on GPU/MCU).
   - Hypotheses that ignore control-loop latency in hardware-in-the-loop contexts are FORBIDDEN.
 
-RULE 5 — TARGET METRICS MUST BE GROUNDED IN CITED BASELINES.
+RULE 5 — TARGET METRICS MUST BE GROUNDED IN UPLOADED-PAPER BASELINES (NOT EXTERNAL BENCHMARKS).
 Arbitrary percentage improvements ("30% better", "40% improvement") with no cited source are FORBIDDEN.
-  Required: ground every target metric in a specific published result from the papers provided or a well-known benchmark.
-  Example format: "ANYmal (RSS 2023) achieves X% terrain adaptation error on 20° slope; our method targets <Y% under the same protocol."
-  If no direct prior number is available, cite the closest comparable result and explain the adjustment.
+  Required: ground every target metric in a specific result reported in ONE OF THE UPLOADED PAPERS. Use the paper's actual filename or title.
+  FORBIDDEN: "well-known benchmarks", "standard datasets", "the literature reports", or any citation that is not literally in analyses_json.
+  If the uploaded papers don't contain a direct prior number, write the target qualitatively instead of fabricating one. Honesty beats fabricated precision.
 
 RULE 6 — HARDWARE RISK: REQUIRE CROSS-PLATFORM VALIDATION PLAN.
 If a hypothesis depends on a custom or lab-built robot/hardware that may break or be unavailable:
@@ -263,14 +280,22 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
 
     if language == "en":
         sim_note = 'For hypotheses derived from simulation-type papers, prioritize simulation validation over experimental validation.'
-        cost_note = 'Cost estimates in USD'
+        cost_note = (
+            'Cost estimates in USD, ROUNDED to readable scales: use "~$1K", "~$5K", "~$10K", "~$50K", "~$100K" style. '
+            'NEVER write "$12,345" or "$3,500" — round to the nearest readable tier. Students scan the table, so legibility > precision.'
+        )
         student_desc = 'a new graduate student'
         period_example = '3-6 months'
         impact_desc_example = 'Solid thesis material. Explainable in job interviews.'
         cost_field = '"estimated_usd"'
     else:
         sim_note = 'paper_type 필드가 "simulation"인 논문에서 파생된 가설은 실험적 검증보다 시뮬레이션 검증을 우선으로 설계하세요'
-        cost_note = 'Cost estimates in KRW for Korean market'
+        cost_note = (
+            '비용 추정은 한국 시장 KRW 기준으로, 반드시 읽기 쉬운 한국식 단위로 표기하세요: '
+            '"~10만원", "~50만원", "~100만원", "~500만원", "~1천만원", "~5천만원", "~1억원" 스타일. '
+            '절대 "12,345,000원" 같은 긴 숫자나 "3,500,000원" 같은 정확한 숫자를 쓰지 마세요. '
+            '가장 가까운 읽기 쉬운 단위로 반올림하세요. 학생들은 표를 스캔하기 때문에 가독성이 정확도보다 중요합니다.'
+        )
         student_desc = 'a new Korean graduate student'
         period_example = '3~6개월'
         impact_desc_example = '졸업 안정적. 취직 시 논문으로 설명 가능'

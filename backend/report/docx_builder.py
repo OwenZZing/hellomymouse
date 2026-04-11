@@ -2,8 +2,9 @@
 from __future__ import annotations
 import os
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
@@ -93,6 +94,34 @@ def tbl_style(table):
                     run.font.size = Pt(9)
 
 
+def _set_section_orient(section, orientation: str):
+    """Set a docx section to 'landscape' or 'portrait' (swaps page w/h)."""
+    if orientation == 'landscape':
+        section.orientation = WD_ORIENT.LANDSCAPE
+        # A4 landscape: 11.69" × 8.27"
+        section.page_width = Inches(11.69)
+        section.page_height = Inches(8.27)
+    else:
+        section.orientation = WD_ORIENT.PORTRAIT
+        section.page_width = Inches(8.27)
+        section.page_height = Inches(11.69)
+
+
+def start_landscape(doc):
+    """Start a new landscape section. Subsequent content goes on wide pages
+    until start_portrait() is called."""
+    sec = doc.add_section()
+    _set_section_orient(sec, 'landscape')
+    return sec
+
+
+def start_portrait(doc):
+    """Start a new portrait section."""
+    sec = doc.add_section()
+    _set_section_orient(sec, 'portrait')
+    return sec
+
+
 # ── Document builder ──────────────────────────────────────────
 
 def build_report(data: dict, output_path: str) -> str:
@@ -133,6 +162,9 @@ def build_report(data: dict, output_path: str) -> str:
     # ── Section 0-B: Projects ────────────────────────────────
     _build_section0(doc, projects, lab_overview, assigned_project)
 
+    # ── Flip to landscape for all table-heavy sections ──────
+    start_landscape(doc)
+
     # ── Section 1: Lab Capabilities ──────────────────────────
     _build_section1(doc, capabilities)
 
@@ -148,6 +180,9 @@ def build_report(data: dict, output_path: str) -> str:
 
     # ── Section 4: Costs ─────────────────────────────────────
     _build_section4(doc, costs)
+
+    # ── Back to portrait for text-heavy sections ─────────────
+    start_portrait(doc)
 
     # ── Section 5: PI Checklist ──────────────────────────────
     _build_section5(doc, checklist)
@@ -488,33 +523,22 @@ def _build_section2(doc, paper_summaries):
         body(doc, '(논문 요약 없음)')
         return
 
-    t = doc.add_table(rows=len(paper_summaries) + 1, cols=6)
+    t = doc.add_table(rows=len(paper_summaries) + 1, cols=5)
     t.style = 'Table Grid'
-    for j, h in enumerate(['논문', 'Tag', '유형', '요약', '핵심 결과', 'Limitation']):
+    for j, h in enumerate(['논문', 'Tag', '요약', '핵심 결과', 'Limitation']):
         t.rows[0].cells[j].text = h
     tbl_header(t)
-    type_colors = {
-        'simulation': 'DDEBF7',
-        'experimental': 'E2EFDA',
-        'theoretical': 'FFF2CC',
-        'review': 'F2F2F2',
-        'mixed': 'FCE4D6',
-    }
     for i, s in enumerate(paper_summaries):
         row = t.rows[i + 1].cells
         title = s.get('title', s.get('filename', ''))
-        ptype = s.get('paper_type', '').lower().split()[0] if s.get('paper_type') else ''
         row[0].text = title[:60] + ('...' if len(title) > 60 else '')
         row[1].text = s.get('method_tag', '')
-        row[2].text = ptype if ptype else '-'
-        row[3].text = s.get('summary', '')[:120]
-        row[4].text = s.get('key_finding', '')[:100]
-        row[5].text = s.get('limitation', '')[:100]
-        if ptype in type_colors:
-            cell_bg(row[2], type_colors[ptype])
+        row[2].text = s.get('summary', '')[:120]
+        row[3].text = s.get('key_finding', '')[:100]
+        row[4].text = s.get('limitation', '')[:100]
         if i % 2 == 0:
-            for ci in [0, 1, 3, 4, 5]:
-                cell_bg(row[ci], BG_ALT)
+            for cell in row:
+                cell_bg(cell, BG_ALT)
     tbl_style(t)
     doc.add_paragraph()
 
@@ -654,9 +678,9 @@ def _build_section3(doc, hypotheses, assigned_project, projects):
         body(doc, '(가설 없음)')
         return
 
-    t = doc.add_table(rows=len(hypotheses) + 1, cols=5)
+    t = doc.add_table(rows=len(hypotheses) + 1, cols=4)
     t.style = 'Table Grid'
-    for j, h in enumerate(['ID', 'Hypothesis', 'Feasibility', '논문 임팩트 / 기간', '핵심 아이디어 (요약)']):
+    for j, h in enumerate(['ID', 'Hypothesis', 'Feasibility', '논문 임팩트 / 기간']):
         t.rows[0].cells[j].text = h
     tbl_header(t)
 
@@ -672,15 +696,14 @@ def _build_section3(doc, hypotheses, assigned_project, projects):
         row[1].text = hypo.get('name', '')
         row[2].text = feas
         row[3].text = f'{impact_stars}\n{period}\n{impact_desc}'
-        stmt = hypo.get('statement', '')
-        row[4].text = stmt[:85] + ('...' if len(stmt) > 85 else '')
 
         cell_bg(row[2], _feas_bg(feas))
         if hid == 'H7':
-            for cell in [row[0], row[1], row[3], row[4]]:
+            for cell in [row[0], row[1], row[3]]:
                 cell_bg(cell, 'FFF2CC')
 
     tbl_style(t)
+    body(doc, '※ 각 가설의 구체적 내용·novelty·baseline·fallback plan은 아래 "3-2. Hypothesis 상세"에서 확인하세요.')
     doc.add_paragraph()
 
     # 3-2 Detail
@@ -760,7 +783,7 @@ def _build_section3(doc, hypotheses, assigned_project, projects):
 
 def _build_section4(doc, costs):
     heading(doc, '4. 소요 자원 및 비용 추정 (KRW 기준)', level=1)
-    body(doc, '* 비용은 참고 수치입니다. 실제 lab 보유 재료 및 환경에 따라 달라집니다.')
+    body(doc, '* 비용은 읽기 쉬운 단위로 반올림된 참고 수치입니다. 실제 lab 보유 재료 및 환경에 따라 달라집니다.')
     if not costs:
         body(doc, '(비용 목록 없음)')
         doc.add_paragraph()
@@ -768,7 +791,7 @@ def _build_section4(doc, costs):
 
     t = doc.add_table(rows=len(costs) + 1, cols=4)
     t.style = 'Table Grid'
-    for j, h in enumerate(['항목', '비용 범주', '추정 비용 (KRW)', '비고']):
+    for j, h in enumerate(['항목', '비용 범주', '추정 비용', '비고']):
         t.rows[0].cells[j].text = h
     tbl_header(t)
     from report.templates import COST_COLORS
