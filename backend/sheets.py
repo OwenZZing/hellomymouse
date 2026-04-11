@@ -89,6 +89,23 @@ def _max_col_value(rows: list[list[str]], col_index: int) -> int:
     return best
 
 
+# ── Failures (analyzer failure feedback) ─────────────────────
+
+_FAILURE_HEADERS = [
+    "created", "provider", "model", "paper_count", "stage",
+    "error", "user_comment", "contact",
+]
+
+
+def append_failure(entry: dict):
+    """Append a failure feedback entry. Auto-creates header row if missing."""
+    ws = _sheet("Failures")
+    if not ws.row_values(1):
+        ws.append_row(_FAILURE_HEADERS)
+    row = [entry.get(h, "") for h in _FAILURE_HEADERS]
+    ws.append_row(row)
+
+
 def get_widget() -> dict:
     ws = _sheet("Stairs")
     rows = ws.get_all_values()

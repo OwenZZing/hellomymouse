@@ -461,16 +461,18 @@ def _build_section1(doc, capabilities):
 
     heading(doc, '1-2. Equipment & Models', level=2)
     if equipment:
-        t = doc.add_table(rows=len(equipment) + 1, cols=3)
+        t = doc.add_table(rows=len(equipment) + 1, cols=5)
         t.style = 'Table Grid'
-        for j, h in enumerate(['Name', '한 줄 설명', '특징']):
+        for j, h in enumerate(['Name', 'Manufacturer', 'Cat. #', '한 줄 설명', '특징']):
             t.rows[0].cells[j].text = h
         tbl_header(t)
         for i, eq in enumerate(equipment):
             row = t.rows[i + 1].cells
             row[0].text = eq.get('name', '')
-            row[1].text = eq.get('description', '')
-            row[2].text = eq.get('notes', '')
+            row[1].text = eq.get('manufacturer', '') or '-'
+            row[2].text = eq.get('catalog_number', '') or '-'
+            row[3].text = eq.get('description', '')
+            row[4].text = eq.get('notes', '')
             if i % 2 == 0:
                 for cell in row:
                     cell_bg(cell, BG_ALT)

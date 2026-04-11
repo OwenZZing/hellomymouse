@@ -319,6 +319,8 @@ class AnalysisPipeline:
                 'limitations': [],
                 'future_directions': [],
                 'key_terms': [],
+                'equipment_details': [],
+                'software_and_tools': [],
                 'summary': f'[분석 실패: {e}]',
                 'limitation_for_hypo': '',
             }
@@ -429,6 +431,16 @@ class AnalysisPipeline:
                     # Both attempts failed. Suggest model alternatives that
                     # exclude whatever the user is already on.
                     raise RuntimeError(self._format_parse_failure_message())
+
+        # Backfill paper_type into paper_summaries from Stage 1 analyses.
+        # Stage 2A's paper_summaries schema doesn't include paper_type (to
+        # save output tokens), so we merge it here so the docx renderer's
+        # "유형" column and color coding actually populate.
+        pa_by_fn = {p.get('filename', ''): p for p in paper_analyses}
+        for ps in result.get('paper_summaries', []) or []:
+            fn = ps.get('filename', '')
+            if fn in pa_by_fn and not ps.get('paper_type'):
+                ps['paper_type'] = pa_by_fn[fn].get('paper_type', '')
 
         self._progress('Stage 2A 완료 — 체크리스트·배경지식·로드맵 생성 중...', 88)
 

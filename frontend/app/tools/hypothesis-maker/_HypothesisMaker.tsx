@@ -161,6 +161,14 @@ const COPY = {
     reviewsTitle: "사용자 리뷰",
     reviewNoReviews: "아직 리뷰가 없습니다.",
     reviewModelLabel: "분석 모델",
+    failureTitle: "분석이 실패했네요 😢",
+    failureDesc: "무엇이 문제였는지 한 줄만 남겨주시면, 어떤 모델·논문 조합에서 자꾸 터지는지 파악하고 고치는 데 큰 도움이 됩니다. (익명 가능)",
+    failureCommentLabel: "무슨 일이 있었나요?",
+    failureCommentPlaceholder: "예: Claude Opus로 논문 12편 돌렸는데 JSON 파싱 실패가 2번 연속 났어요.",
+    failureContactLabel: "연락처 (선택) — 후속 대응이 필요하면",
+    failureContactPlaceholder: "이메일 또는 Threads ID (비워두셔도 됩니다)",
+    failureSubmitBtn: "문제 보고하기",
+    failureSubmitted: "감사합니다! 접수되었습니다.",
   },
   en: {
     backHome: "← Back to Home",
@@ -234,6 +242,14 @@ const COPY = {
     reviewsTitle: "User reviews",
     reviewNoReviews: "No reviews yet.",
     reviewModelLabel: "Model used",
+    failureTitle: "The analysis failed 😢",
+    failureDesc: "A one-line note from you helps me figure out which model/paper combos keep breaking so I can fix them. Anonymous is fine.",
+    failureCommentLabel: "What happened?",
+    failureCommentPlaceholder: "e.g. Claude Opus with 12 papers — JSON parse failed twice in a row.",
+    failureContactLabel: "Contact (optional) — in case I need to follow up",
+    failureContactPlaceholder: "Email or Threads handle (leave blank if you prefer)",
+    failureSubmitBtn: "Report issue",
+    failureSubmitted: "Thanks! Report received.",
   },
 };
 
@@ -399,6 +415,9 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     { name: string; field: string; position: string; stars: number; comment: string; provider: string; model: string }[]
   >([]);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [failureComment, setFailureComment] = useState("");
+  const [failureContact, setFailureContact] = useState("");
+  const [failureSubmitted, setFailureSubmitted] = useState(false);
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -563,12 +582,35 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     }
   };
 
+  const handleSubmitFailure = async () => {
+    try {
+      await fetch(`${API_URL}/api/failure-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: jobId,
+          provider,
+          model,
+          paper_count: labFiles.length,
+          stage: progressMsg.slice(0, 200),
+          error,
+          user_comment: failureComment,
+          contact: failureContact,
+        }),
+      });
+      setFailureSubmitted(true);
+    } catch {
+      // Silent fail — feedback is best-effort. User can retry if needed.
+    }
+  };
+
   const handleReset = () => {
     setStep("setup");
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
     setAssignedProject(""); setBgLevel("beginner"); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
     setReviewName(""); setReviewField(""); setReviewPosition(""); setReviewStars(0); setReviewComment(""); setReviewSubmitted(false);
+    setFailureComment(""); setFailureContact(""); setFailureSubmitted(false);
   };
 
   return (
@@ -917,12 +959,55 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
               <p className="text-xs text-zinc-600">{c.analyzeWait}</p>
             </div>
             {error && (
-              <button
-                onClick={() => setStep("configure")}
-                className="w-full py-3 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-500 text-sm transition-all"
-              >
-                {c.retryBtn}
-              </button>
+              <>
+                <button
+                  onClick={() => setStep("configure")}
+                  className="w-full py-3 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-500 text-sm transition-all"
+                >
+                  {c.retryBtn}
+                </button>
+
+                {/* ── Failure feedback form ── */}
+                <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-3">
+                  <div>
+                    <p className="text-sm text-amber-300 font-medium mb-1">{c.failureTitle}</p>
+                    <p className="text-xs text-zinc-500 leading-relaxed">{c.failureDesc}</p>
+                  </div>
+                  {failureSubmitted ? (
+                    <p className="text-sm text-emerald-400 text-center py-2">{c.failureSubmitted}</p>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">{c.failureCommentLabel}</label>
+                        <textarea
+                          value={failureComment}
+                          onChange={(e) => setFailureComment(e.target.value)}
+                          placeholder={c.failureCommentPlaceholder}
+                          rows={2}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">{c.failureContactLabel}</label>
+                        <input
+                          type="text"
+                          value={failureContact}
+                          onChange={(e) => setFailureContact(e.target.value)}
+                          placeholder={c.failureContactPlaceholder}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                      </div>
+                      <button
+                        onClick={handleSubmitFailure}
+                        disabled={!failureComment.trim()}
+                        className="w-full py-2 rounded-lg bg-amber-600/80 hover:bg-amber-500 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                      >
+                        {c.failureSubmitBtn}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}

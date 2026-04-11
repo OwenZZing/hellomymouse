@@ -326,6 +326,51 @@ async def get_reviews():
         return {"reviews": []}
 
 
+# ── Failure feedback ─────────────────────────────────────────
+
+class FailureFeedbackBody(BaseModel):
+    job_id: str = ""
+    provider: str = ""
+    model: str = ""
+    paper_count: int = 0
+    stage: str = ""
+    error: str = ""
+    user_comment: str = ""
+    contact: str = ""
+
+
+@app.post("/api/failure-feedback")
+async def submit_failure_feedback(body: FailureFeedbackBody):
+    """Record a failed-run feedback so we can learn what's actually breaking.
+    Accepts either a live job_id (auto-fills provider/model/error) or a raw
+    payload (frontend already collected context)."""
+    provider = body.provider
+    model = body.model
+    error = body.error
+    if body.job_id and body.job_id in jobs:
+        j = jobs[body.job_id]
+        provider = provider or j.get("api_provider", "")
+        model = model or j.get("model", "")
+        error = error or (j.get("error") or "")
+
+    entry = {
+        "created":      time.time(),
+        "provider":     provider,
+        "model":        model,
+        "paper_count":  body.paper_count,
+        "stage":        body.stage,
+        "error":        error[:2000],          # cap huge tracebacks
+        "user_comment": body.user_comment.strip()[:2000],
+        "contact":      body.contact.strip()[:200],
+    }
+    try:
+        sheets.append_failure(entry)
+    except Exception as e:
+        print(f"[sheets] append_failure failed: {e}")
+        raise HTTPException(500, f"Sheets error: {e}")
+    return {"ok": True}
+
+
 # ── SSE progress stream ───────────────────────────────────────
 
 @app.get("/api/progress/{job_id}")

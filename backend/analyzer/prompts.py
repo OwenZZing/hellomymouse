@@ -64,6 +64,10 @@ Title: {title}
 Paper content:
 {sections_text}
 
+EXTRACTION HINTS:
+- `equipment_details`: Search Methods/Materials for reagents, antibodies, instruments with their manufacturer and catalog numbers (commonly written as "from Sigma-Aldrich (Cat# XXXX)", "Leica SP8 confocal microscope", "anti-GFP antibody (Abcam, ab32572)"). If the paper doesn't list a manufacturer or catalog, use empty strings — DO NOT invent.
+- `software_and_tools`: Search Methods (and sometimes Results/figure captions) for software names. Common phrasings: "analyzed using GraphPad Prism 9.0", "simulated in MATLAB R2022b / Simulink", "implemented in PyTorch", "processed with ImageJ", "statistical analysis in R (v4.2)", "ANSYS Workbench", "Gaussian 16", "ROOT 6.24". Include libraries/frameworks (PyTorch, HuggingFace, scipy), stats software (Prism, SPSS, R, SAS), simulation tools (MATLAB, Simulink, Isaac Sim, MuJoCo, ANSYS, OpenFOAM, Gaussian, VASP), image/data analysis tools (ImageJ/Fiji, Origin), and CAD/design tools (SolidWorks). Capture the version if stated. If the paper doesn't mention any software explicitly, return an empty array — DO NOT invent.
+
 Return JSON with this exact structure:
 {{
   "filename": "{filename}",
@@ -76,6 +80,12 @@ Return JSON with this exact structure:
   "limitations": ["limitation1", "limitation2"],
   "future_directions": ["direction1", "direction2"],
   "key_terms": ["term1", "term2"],
+  "equipment_details": [
+    {{"name": "equipment/reagent/model name", "manufacturer": "company name if stated in paper (e.g., Sigma-Aldrich, Thermo Fisher, Zeiss) — empty string if not mentioned", "catalog_number": "catalog/part number if stated (e.g., Cat# A12379, #ab32572) — empty string if not mentioned", "purpose": "1-phrase what it's used for in this paper"}}
+  ],
+  "software_and_tools": [
+    {{"name": "software/library name as stated in the paper (e.g., GraphPad Prism, MATLAB, PyTorch, ImageJ, ROOT, ANSYS, R, Python)", "version": "version string if stated (e.g., '9.0', 'R2022b') — empty string if not mentioned", "purpose": "1-phrase what it was used for in this paper (e.g., 'two-way ANOVA', 'PPO training', 'FEM simulation')"}}
+  ],
   "paper_type": "simulation | experimental | theoretical | review | mixed — choose the most accurate",
   "summary": "2-3 sentence summary of what this paper does and finds",
   "limitation_for_hypo": "the single most exploitable limitation or gap for a follow-up hypothesis"
@@ -286,6 +296,7 @@ Generate a comprehensive Research Starter Kit. Follow these rules:
 - IMPORTANT: Keep each hypothesis field CONCISE (2-3 sentences max per field) to ensure ALL 7 hypotheses fit within the response. Completeness of all 7 hypotheses is more important than length of each.
 - {cost_note}
 - STRICTLY FOLLOW the 3 mandatory rules defined in the system prompt (metrics+baseline, fallback plan, no naive A+B integration)
+- EQUIPMENT EXTRACTION: For `lab_capabilities.equipment_or_models`, directly reuse the `equipment_details` arrays from each paper analysis. Preserve the `manufacturer` and `catalog_number` fields EXACTLY as reported in the source papers — do NOT invent company names or catalog numbers. If a paper didn't mention a manufacturer or catalog, leave those fields as empty strings. Deduplicate entries that refer to the same product across multiple papers by merging them into a single row (keep the most complete manufacturer/catalog info). New grad students rely on these fields for lab inventory management, so accuracy and completeness are more important than prose.
 
 Return this exact JSON structure:
 {{
@@ -309,7 +320,7 @@ Return this exact JSON structure:
       {{"name": "...", "description": "one-sentence plain-language explanation of what this IS", "lab_status": "what the lab has built/done with it"}}
     ],
     "equipment_or_models": [
-      {{"name": "...", "description": "one-sentence plain-language explanation", "notes": "lab-specific notes"}}
+      {{"name": "...", "manufacturer": "company name if any paper stated it (e.g., Sigma-Aldrich, Thermo Fisher, Zeiss). Empty string if unknown.", "catalog_number": "catalog/part number if any paper stated it (e.g., Cat# A12379). Empty string if unknown.", "description": "one-sentence plain-language explanation", "notes": "lab-specific notes, or a purpose/use hint. Mention which paper(s) cited this equipment if relevant."}}
     ]
   }},
   "paper_summaries": [
@@ -460,6 +471,22 @@ RULE 7 — CATEGORY COVERAGE.
 Use at least 3 different categories from: public_data, technique_study, data_analysis, literature_review.
 At least 2 tasks must be `public_data` (lowest entry barrier — student can start immediately).
 
+RULE 8 — LAB-SPECIFIC TOOL STARTER TASK (DATA-DRIVEN).
+The "Software/tools cited in the lab's papers (frequency-ranked)" line in the lab context is the AUTHORITATIVE source — it was extracted directly from each paper's Methods section. You MUST include at least ONE starter task that teaches the student the basics of the MOST FREQUENTLY cited software from that list (or one of the top 3, if they serve different purposes — e.g., a stats tool + a simulation tool).
+
+How to apply:
+  1. Read the frequency-ranked software list in the lab context.
+  2. Pick the top 1~2 tools the student will realistically touch on day one (stats/plotting tools, simulation frameworks, ML frameworks, imaging tools — whatever dominates).
+  3. Create a concrete technique_study task: "install [tool] + follow [specific official tutorial] + produce [deliverable]". Name the actual tutorial if you know one (e.g., "PyTorch 공식 60-min blitz", "GraphPad Prism basic t-test tutorial", "MATLAB Onramp", "Isaac Sim tutorial — load a robot scene").
+  4. Skip tools the student almost certainly already knows (Python, git, Microsoft Word). Focus on the field-specific ones.
+  5. If the same tool is cited with a clear purpose (e.g., "MATLAB — FEM simulation", "Prism — two-way ANOVA"), use that purpose to anchor the task.
+
+FALLBACK (only if the software list is empty or "(no software explicitly mentioned in any paper)"):
+  - Default to Python + NumPy + Matplotlib + pandas + Jupyter. It works for every quantitative field and never misfires the way a field-specific tool would.
+  - Do NOT guess field-specific tools from the detected field alone — if the papers didn't name them, neither should you.
+
+CRITICAL: Never recommend a tool that contradicts the lab's actual stack. If the lab uses MATLAB/ANSYS, don't recommend GraphPad Prism. If the lab uses Prism/ImageJ, don't recommend ROS2. Match reality, not a field stereotype.
+
 Return ONLY valid JSON with no markdown fences, no explanation."""
 
 STAGE_2C_SYSTEM_EN = """You are a research mentor helping an undergraduate student (or brand-new research intern) take their very first steps toward research.
@@ -476,17 +503,24 @@ Write ALL content in English. When a domain-specific term appears for the first 
 5. REALISTIC HOURS — include learning overhead (typical: 8-30 hours).
 6. BRIDGE TO HYPOTHESES — leads_to must name which H1~H7 this prepares for, and how.
 7. CATEGORY COVERAGE — use at least 3 categories: public_data, technique_study, data_analysis, literature_review. At least 2 must be public_data.
+8. LAB-SPECIFIC TOOL TASK (DATA-DRIVEN) — include AT LEAST ONE task that teaches the MOST FREQUENTLY cited software from the lab context's "Software/tools cited in the lab's papers (frequency-ranked)" line. That list was extracted directly from each paper's Methods section and is authoritative. Pick the top 1~2 tools the student will realistically use on day one, name a specific official tutorial, and produce a concrete deliverable. Skip tools the student already knows (Python, git, Word). If the software list is empty, fall back to Python + NumPy + Matplotlib + pandas + Jupyter. NEVER guess field-specific tools (Prism, MATLAB, ROS) from the detected field alone — if the papers didn't name them, don't recommend them.
 
 Return ONLY valid JSON."""
 
 
 def _summarize_lab_context(paper_analyses: list[dict]) -> str:
-    """Extract lab techniques and key terms for grounding Stage 2C."""
+    """Extract lab techniques, key terms, and actual software/tools used
+    (aggregated from each paper's Methods) for grounding Stage 2C."""
     techniques: list[str] = []
     seen_tech: set[str] = set()
     key_terms: list[str] = []
     seen_term: set[str] = set()
     paper_types: dict[str, int] = {}
+    # Software: count frequency across papers (case-insensitive key) and
+    # remember one canonical name + purpose example per tool.
+    sw_count: dict[str, int] = {}
+    sw_display: dict[str, str] = {}
+    sw_purpose: dict[str, str] = {}
 
     for p in paper_analyses:
         for t in p.get('techniques', []) or []:
@@ -500,11 +534,31 @@ def _summarize_lab_context(paper_analyses: list[dict]) -> str:
         pt = (p.get('paper_type') or '').strip().lower().split()[0] if p.get('paper_type') else ''
         if pt:
             paper_types[pt] = paper_types.get(pt, 0) + 1
+        for sw in p.get('software_and_tools', []) or []:
+            name = (sw.get('name') or '').strip()
+            if not name:
+                continue
+            key = name.lower()
+            sw_count[key] = sw_count.get(key, 0) + 1
+            if key not in sw_display:
+                sw_display[key] = name
+                sw_purpose[key] = (sw.get('purpose') or '').strip()
+
+    # Sort by frequency desc, then by first-seen order.
+    ranked = sorted(sw_count.items(), key=lambda kv: (-kv[1], kv[0]))
+    software_lines = []
+    for key, cnt in ranked[:15]:
+        display = sw_display[key]
+        purpose = sw_purpose[key]
+        suffix = f" — {purpose}" if purpose else ''
+        software_lines.append(f"{display} (×{cnt}){suffix}")
+    software_str = '; '.join(software_lines) if software_lines else '(no software explicitly mentioned in any paper)'
 
     return (
         f"- Core techniques used by the lab: {', '.join(techniques[:20]) or '(none detected)'}\n"
         f"- Key domain terms: {', '.join(key_terms[:25]) or '(none detected)'}\n"
-        f"- Paper type distribution: {', '.join(f'{k}×{v}' for k, v in paper_types.items()) or '(unknown)'}"
+        f"- Paper type distribution: {', '.join(f'{k}×{v}' for k, v in paper_types.items()) or '(unknown)'}\n"
+        f"- Software/tools cited in the lab's papers (frequency-ranked): {software_str}"
     )
 
 
