@@ -800,7 +800,7 @@ def _build_section4(doc, costs):
         row[0].text = cost.get('item', '')
         cat = cost.get('category', 'Medium')
         row[1].text = cat
-        row[2].text = cost.get('estimated_krw', '')
+        row[2].text = cost.get('estimated_cost') or cost.get('estimated_krw') or cost.get('estimated_usd') or ''
         row[3].text = cost.get('note', '')
         cell_bg(row[1], COST_COLORS.get(cat, 'FFFFFF'))
         if i % 2 == 0:

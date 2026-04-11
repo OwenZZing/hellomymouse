@@ -127,8 +127,13 @@ You are given a fixed set of papers in `analyses_json`. These are the ONLY sourc
 
 RULE 1 — NO VAGUE CLAIMS. REQUIRE METRICS + BASELINE (from uploaded papers only).
 Every hypothesis MUST specify:
-  - evaluation_metrics: concrete quantitative metrics (e.g., "CoT error < 5 cm on 15° slope", "energy consumption (J/step)", "success rate (%) over 20 trials")
-  - baseline: the specific UPLOADED paper + the condition being compared against (e.g., "vs. single-sensor slip detection reported in {filename}", "vs. the fixed-gain PPO baseline in {filename}"). Use the paper's actual filename or title from analyses_json.
+  - evaluation_metrics: concrete quantitative metrics, matched to the actual field of the uploaded papers. Cross-field examples:
+      • Robotics/control: "CoT error < 5 cm on 15° slope", "energy consumption (J/step)", "success rate (%) over 20 trials"
+      • Wet-lab / bio: "단백질 발현량 fold-change (Western blot densitometry)", "세포 생존율 (%) at 24h / 48h", "신경돌기 길이 (µm) — NeuronJ 측정"
+      • ML / CV / NLP: "Accuracy / F1 / mIoU on [the dataset named in {filename}]", "inference latency (ms) on [device named in paper]"
+      • Materials / chemistry: "yield (%)", "선택도 / 전환율 (%)", "인장 강도 (MPa)"
+    Pick the metric family that matches the uploaded papers' actual field — DO NOT force a robotics-style metric onto a bio paper or vice versa.
+  - baseline: the specific UPLOADED paper + the condition being compared against (e.g., "vs. the single-sensor slip detection reported in {filename}", "vs. the Western blot result in Figure 3 of {filename}", "vs. the accuracy reported in Table 2 of {filename}"). Use the paper's actual filename or title from analyses_json.
   Vague statements like "performance will improve" or "A combined with B will be better" are STRICTLY FORBIDDEN.
   If the uploaded papers don't give a quantitative baseline number, write the baseline qualitatively: "Baseline: the method from {filename}, which reports qualitative improvement on X but does not report Y; our target is to establish a Y value under the same setup." DO NOT invent numbers to fill the field.
 
@@ -287,7 +292,7 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
         student_desc = 'a new graduate student'
         period_example = '3-6 months'
         impact_desc_example = 'Solid thesis material. Explainable in job interviews.'
-        cost_field = '"estimated_usd"'
+        cost_field = '"estimated_cost"'
     else:
         sim_note = 'paper_type 필드가 "simulation"인 논문에서 파생된 가설은 실험적 검증보다 시뮬레이션 검증을 우선으로 설계하세요'
         cost_note = (
@@ -299,7 +304,7 @@ def build_stage2_prompt(paper_analyses: list[dict], assigned_project: str,
         student_desc = 'a new Korean graduate student'
         period_example = '3~6개월'
         impact_desc_example = '졸업 안정적. 취직 시 논문으로 설명 가능'
-        cost_field = '"estimated_krw"'
+        cost_field = '"estimated_cost"'
 
     return f"""You are helping {student_desc} find their first research hypothesis.
 
