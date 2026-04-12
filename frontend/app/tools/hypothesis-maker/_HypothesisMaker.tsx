@@ -49,11 +49,11 @@ const MODELS: Record<Provider, string[]> = {
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
   gemini: ["gemini-2.5-flash"],
   openrouter: [
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "qwen/qwen3-coder:free",
     "nousresearch/hermes-3-llama-3.1-405b:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "google/gemma-3-27b-it:free",
+    "google/gemma-4-31b-it:free",
     "minimax/minimax-m2.5:free",
   ],
 };
@@ -74,7 +74,7 @@ const MODEL_OUTPUT_CAP: Record<string, number> = {
   "nousresearch/hermes-3-llama-3.1-405b:free": 16384,
   "meta-llama/llama-3.3-70b-instruct:free": 16384,
   "nvidia/nemotron-3-super-120b-a12b:free": 32768,
-  "google/gemma-3-27b-it:free": 8192,
+  "google/gemma-4-31b-it:free": 16384,
   "minimax/minimax-m2.5:free": 32768,
 };
 
