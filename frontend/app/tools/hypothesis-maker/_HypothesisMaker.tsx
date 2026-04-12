@@ -68,7 +68,7 @@ const MODEL_OUTPUT_CAP: Record<string, number> = {
   "gpt-4o-mini": 16384,
   "gpt-4-turbo": 4096,
   "o1-mini": 65536,
-  "gemini-2.5-flash": 8192,
+  "gemini-2.5-flash": 65536,
   // OpenRouter free models — caps from openrouter.ai/api/v1/models
   "qwen/qwen3-coder:free": 32768,
   "nousresearch/hermes-3-llama-3.1-405b:free": 16384,

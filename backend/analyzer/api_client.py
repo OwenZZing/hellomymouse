@@ -113,9 +113,9 @@ class APIClient:
         'o1':                           32768,
         'o1-mini':                      65536,
         'o3-mini':                      65536,
-        # Gemini
-        'gemini-2.5-pro':                8192,
-        'gemini-2.5-flash':              8192,
+        # Gemini 2.5 — Flash supports 64K, Pro supports 64K
+        'gemini-2.5-pro':               65536,
+        'gemini-2.5-flash':             65536,
     }
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
