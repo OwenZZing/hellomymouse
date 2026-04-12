@@ -118,9 +118,9 @@ class APIClient:
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
         """Send prompt and return response text."""
-        # OpenRouter models aren't in the static _MAX_TOKENS table (too many to
-        # enumerate). Use 8192 as a safe default — most chat models support this.
-        default_cap = 8192 if self.provider == 'openrouter' else max_tokens
+        # OpenRouter free models generally support 16K–32K output.
+        # Use 16384 as a safe default for models not in the table.
+        default_cap = 16384 if self.provider == 'openrouter' else max_tokens
         safe_max = self._MAX_TOKENS.get(self.model, default_cap)
         max_tokens = min(max_tokens, safe_max)
         if self.provider == 'claude':

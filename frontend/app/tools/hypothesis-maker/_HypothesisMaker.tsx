@@ -69,13 +69,13 @@ const MODEL_OUTPUT_CAP: Record<string, number> = {
   "gpt-4-turbo": 4096,
   "o1-mini": 65536,
   "gemini-2.5-flash": 8192,
-  // OpenRouter: 8K is a safe default that every listed model supports.
-  "qwen/qwen3-coder:free": 8192,
-  "nousresearch/hermes-3-llama-3.1-405b:free": 8192,
-  "meta-llama/llama-3.3-70b-instruct:free": 8192,
-  "nvidia/nemotron-3-super-120b-a12b:free": 8192,
+  // OpenRouter free models — caps from openrouter.ai/api/v1/models
+  "qwen/qwen3-coder:free": 32768,
+  "nousresearch/hermes-3-llama-3.1-405b:free": 16384,
+  "meta-llama/llama-3.3-70b-instruct:free": 16384,
+  "nvidia/nemotron-3-super-120b-a12b:free": 32768,
   "google/gemma-3-27b-it:free": 8192,
-  "minimax/minimax-m2.5:free": 8192,
+  "minimax/minimax-m2.5:free": 32768,
 };
 
 // Empirical: Stage 2A output costs ~2000 tokens per paper + ~4000 fixed
