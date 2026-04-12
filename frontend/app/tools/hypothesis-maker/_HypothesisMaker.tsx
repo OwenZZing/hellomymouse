@@ -32,7 +32,7 @@ function StarBackground() {
 
 // ── Types ─────────────────────────────────────────────────────
 
-type Provider = "claude" | "openai" | "gemini";
+type Provider = "claude" | "openai" | "gemini" | "openrouter";
 type Locale = "ko" | "en";
 
 interface Project {
@@ -48,6 +48,12 @@ const MODELS: Record<Provider, string[]> = {
   claude: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
   gemini: ["gemini-2.5-flash"],
+  openrouter: [
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-r1",
+    "meta-llama/llama-3.3-70b-instruct",
+    "qwen/qwen-2.5-72b-instruct",
+  ],
 };
 
 // Per-model output token cap (must mirror backend analyzer/api_client.py::_MAX_TOKENS)
@@ -61,6 +67,11 @@ const MODEL_OUTPUT_CAP: Record<string, number> = {
   "gpt-4-turbo": 4096,
   "o1-mini": 65536,
   "gemini-2.5-flash": 8192,
+  // OpenRouter: 8K is a safe default that every listed model supports.
+  "deepseek/deepseek-chat": 8192,
+  "deepseek/deepseek-r1": 8192,
+  "meta-llama/llama-3.3-70b-instruct": 8192,
+  "qwen/qwen-2.5-72b-instruct": 8192,
 };
 
 // Empirical: Stage 2A output costs ~2000 tokens per paper + ~4000 fixed
@@ -79,6 +90,32 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   claude: "Claude (Anthropic)",
   openai: "GPT (OpenAI)",
   gemini: "Gemini (Google)",
+  openrouter: "OpenRouter",
+};
+
+// Provider API key signup guides. Links to the exact page where the student
+// can create a key, with a one-line note on pricing/friction.
+const PROVIDER_GUIDES: Record<Provider, { url: string; ko: string; en: string }> = {
+  claude: {
+    url: "https://console.anthropic.com/settings/keys",
+    ko: "Anthropic Console → Settings → API Keys. 카드 등록 + 최소 $5 크레딧 선결제 필요. 품질 최상.",
+    en: "Anthropic Console → Settings → API Keys. Card + $5 min credit required. Highest quality.",
+  },
+  openai: {
+    url: "https://platform.openai.com/api-keys",
+    ko: "OpenAI Platform → API Keys. 카드 등록 + 선결제 필요. GPT-4o 기준 Claude와 유사한 비용.",
+    en: "OpenAI Platform → API Keys. Card + prepay required. GPT-4o cost similar to Claude.",
+  },
+  gemini: {
+    url: "https://aistudio.google.com/app/apikey",
+    ko: "Google AI Studio → Get API Key. 무료 티어 제공 (분당/일일 호출 제한). 카드 없이 시작 가능하지만 무료 한도 낮음.",
+    en: "Google AI Studio → Get API Key. Free tier available (tight per-minute/daily limits). No card needed but limited.",
+  },
+  openrouter: {
+    url: "https://openrouter.ai/settings/keys",
+    ko: "OpenRouter 가입 → Keys. DeepSeek/Llama/Qwen 등 여러 저가·무료 모델을 한 키로 사용. 최소 $1 크레딧 충전하면 rate limit 완화.",
+    en: "OpenRouter → Keys. One key for DeepSeek/Llama/Qwen etc. $1 top-up loosens free-tier limits.",
+  },
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -126,7 +163,7 @@ const COPY = {
     instrLabel: "추가 지시사항 (선택사항)",
     instrPlaceholder: "예: '교수님이 소프트 로봇 그리퍼 쪽을 맡아보라고 하셨어요' 또는 '특히 에너지 효율 관련 가설을 중점적으로 뽑아주세요'",
     costTitle: "비용 안내",
-    costDesc: "논문 5편 기준 약 Claude Sonnet $0.5~1 / GPT-4o $1~2 / Gemini Flash $0.1~0.5",
+    costDesc: "논문 5편 기준 약 Claude Sonnet $0.5~1 / GPT-4o $1~2 / Gemini Flash $0.1~0.5 / OpenRouter(DeepSeek) $0.05~0.2",
     capacityWarnTitle: (n: number, model: string) => `⚠ 논문 ${n}편 × ${model}`,
     capacityWarnBody: (maxSafe: number) =>
       `선택한 모델의 출력 한도에 가까워 결과가 잘릴 수 있습니다. 논문을 ${maxSafe}편 이하로 줄이거나 Claude Sonnet 4.6(64K 출력) 사용을 권장합니다.`,
@@ -207,7 +244,7 @@ const COPY = {
     instrLabel: "Additional instructions (optional)",
     instrPlaceholder: "e.g. 'My PI told me to focus on soft robotic grippers' or 'Emphasize energy-efficiency hypotheses'",
     costTitle: "Estimated cost",
-    costDesc: "~5 papers: Claude Sonnet $0.5–1 / GPT-4o $1–2 / Gemini Flash $0.1–0.5",
+    costDesc: "~5 papers: Claude Sonnet $0.5–1 / GPT-4o $1–2 / Gemini Flash $0.1–0.5 / OpenRouter(DeepSeek) $0.05–0.2",
     capacityWarnTitle: (n: number, model: string) => `⚠ ${n} papers × ${model}`,
     capacityWarnBody: (maxSafe: number) =>
       `You're approaching this model's output limit — the JSON response may get truncated. Consider reducing to ${maxSafe} papers or switching to Claude Sonnet 4.6 (64K output).`,
@@ -653,8 +690,8 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-zinc-400 mb-3">{c.providerLabel}</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["claude", "openai", "gemini"] as Provider[]).map((p) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(["claude", "openai", "gemini", "openrouter"] as Provider[]).map((p) => (
                   <button
                     key={p}
                     onClick={() => { setProvider(p); setModel(MODELS[p][0]); }}
@@ -676,13 +713,33 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
               </div>
             )}
 
+            {/* API key signup guide — one box per selected provider */}
+            <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/20">
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                {PROVIDER_GUIDES[provider][locale]}
+              </p>
+              <a
+                href={PROVIDER_GUIDES[provider].url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-violet-400 hover:text-violet-300 underline mt-1.5 inline-block"
+              >
+                {locale === "en" ? "Open signup page ↗" : "API 키 발급 페이지 열기 ↗"}
+              </a>
+            </div>
+
             <div>
               <label className="block text-sm text-zinc-400 mb-2">{c.apiKeyLabel}</label>
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={provider === "claude" ? "sk-ant-..." : provider === "openai" ? "sk-..." : "AIza..."}
+                placeholder={
+                  provider === "claude" ? "sk-ant-..."
+                  : provider === "openai" ? "sk-..."
+                  : provider === "openrouter" ? "sk-or-v1-..."
+                  : "AIza..."
+                }
                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition-colors font-mono"
               />
               <p className="text-xs text-zinc-600 mt-1">{c.apiKeyNote}</p>

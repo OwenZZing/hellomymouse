@@ -21,6 +21,8 @@ class APIClient:
             self._init_openai()
         elif self.provider == 'gemini':
             self._init_gemini()
+        elif self.provider == 'openrouter':
+            self._init_openrouter()
         else:
             raise ValueError(f'Unknown provider: {provider}')
 
@@ -35,6 +37,22 @@ class APIClient:
         try:
             import openai
             self._client = openai.OpenAI(api_key=self.api_key)
+        except ImportError:
+            raise ImportError('openai package not installed. Run: pip install openai')
+
+    def _init_openrouter(self):
+        """OpenRouter is OpenAI-compatible — reuse the OpenAI SDK with a custom base_url.
+        Attribution headers are recommended by OpenRouter for free-tier usage tracking."""
+        try:
+            import openai
+            self._client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url='https://openrouter.ai/api/v1',
+                default_headers={
+                    'HTTP-Referer': 'https://hellomymouse.com',
+                    'X-Title': 'Hypothesis Maker',
+                },
+            )
         except ImportError:
             raise ImportError('openai package not installed. Run: pip install openai')
 
@@ -102,11 +120,14 @@ class APIClient:
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
         """Send prompt and return response text."""
-        safe_max = self._MAX_TOKENS.get(self.model, max_tokens)
+        # OpenRouter models aren't in the static _MAX_TOKENS table (too many to
+        # enumerate). Use 8192 as a safe default — most chat models support this.
+        default_cap = 8192 if self.provider == 'openrouter' else max_tokens
+        safe_max = self._MAX_TOKENS.get(self.model, default_cap)
         max_tokens = min(max_tokens, safe_max)
         if self.provider == 'claude':
             return self._call_claude(user_prompt, system_prompt, max_tokens)
-        elif self.provider == 'openai':
+        elif self.provider in ('openai', 'openrouter'):
             return self._call_openai(user_prompt, system_prompt, max_tokens)
         elif self.provider == 'gemini':
             return self._call_gemini(user_prompt, system_prompt, max_tokens)
@@ -152,11 +173,15 @@ class APIClient:
             )
             return response.choices[0].message.content
         except openai.AuthenticationError:
-            raise ValueError('OpenAI API 키가 올바르지 않습니다.')
+            label = 'OpenRouter' if self.provider == 'openrouter' else 'OpenAI'
+            raise ValueError(f'{label} API 키가 올바르지 않습니다.')
         except openai.RateLimitError:
-            raise RuntimeError('OpenAI API rate limit에 도달했습니다. 잠시 후 다시 시도하세요.')
+            label = 'OpenRouter' if self.provider == 'openrouter' else 'OpenAI'
+            hint = ' (무료 모델은 사용량 제한이 엄격합니다)' if self.provider == 'openrouter' else ''
+            raise RuntimeError(f'{label} API rate limit에 도달했습니다. 잠시 후 다시 시도하세요.{hint}')
         except Exception as e:
-            raise RuntimeError(f'OpenAI API 오류: {e}')
+            label = 'OpenRouter' if self.provider == 'openrouter' else 'OpenAI'
+            raise RuntimeError(f'{label} API 오류: {e}')
 
     def _call_gemini_with_files(self, user_prompt: str, system_prompt: str,
                                 files: list, max_tokens: int) -> str:
