@@ -43,9 +43,11 @@ class APIClient:
     def _init_openrouter(self):
         try:
             import openai
+            import httpx
             self._client = openai.OpenAI(
                 api_key=self.api_key,
                 base_url='https://openrouter.ai/api/v1',
+                timeout=httpx.Timeout(300.0, connect=30.0),
                 default_headers={
                     'HTTP-Referer': 'https://hellomymouse.com',
                     'X-Title': 'Hypothesis Maker',
