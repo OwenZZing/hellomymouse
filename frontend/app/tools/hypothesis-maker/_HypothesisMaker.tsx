@@ -49,15 +49,12 @@ const MODELS: Record<Provider, string[]> = {
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
   gemini: ["gemini-2.5-flash"],
   openrouter: [
-    // Free tier (no payment, but ~50/day & 20/min limit)
+    "qwen/qwen3-coder:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1:free",
-    "deepseek/deepseek-chat-v3-0324:free",
-    // Paid (very cheap, no rate limit headaches)
-    "deepseek/deepseek-chat",
-    "deepseek/deepseek-r1",
-    "meta-llama/llama-3.3-70b-instruct",
-    "qwen/qwen-2.5-72b-instruct",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-3-27b-it:free",
+    "minimax/minimax-m2.5:free",
   ],
 };
 
@@ -73,13 +70,12 @@ const MODEL_OUTPUT_CAP: Record<string, number> = {
   "o1-mini": 65536,
   "gemini-2.5-flash": 8192,
   // OpenRouter: 8K is a safe default that every listed model supports.
+  "qwen/qwen3-coder:free": 8192,
+  "nousresearch/hermes-3-llama-3.1-405b:free": 8192,
   "meta-llama/llama-3.3-70b-instruct:free": 8192,
-  "deepseek/deepseek-r1:free": 8192,
-  "deepseek/deepseek-chat-v3-0324:free": 8192,
-  "deepseek/deepseek-chat": 8192,
-  "deepseek/deepseek-r1": 8192,
-  "meta-llama/llama-3.3-70b-instruct": 8192,
-  "qwen/qwen-2.5-72b-instruct": 8192,
+  "nvidia/nemotron-3-super-120b-a12b:free": 8192,
+  "google/gemma-3-27b-it:free": 8192,
+  "minimax/minimax-m2.5:free": 8192,
 };
 
 // Empirical: Stage 2A output costs ~2000 tokens per paper + ~4000 fixed
@@ -121,8 +117,8 @@ const PROVIDER_GUIDES: Record<Provider, { url: string; ko: string; en: string }>
   },
   openrouter: {
     url: "https://openrouter.ai/settings/keys",
-    ko: "OpenRouter 가입 → Keys. 카드 없이 :free 모델 사용 가능 (단, 일일 ~50회·분당 20회 제한). 논문 10편 분석 시 1회 정도 가능. 더 돌리려면 $1~10 충전.",
-    en: "OpenRouter → Keys. :free models work card-free (~50/day & 20/min limit, ~1 run for 10 papers). Top up $1–10 for more.",
+    ko: "OpenRouter 가입 → Keys. 카드 없이 :free 모델 사용 가능 (단, 일일 ~50회·분당 20회 제한). 논문 10편 분석 시 1회 정도 가능. 하나가 실패하면 다음 모델로 자동 전환됩니다.",
+    en: "OpenRouter → Keys. :free models work card-free (~50/day & 20/min limit, ~1 run for 10 papers). Auto-fallback to next model on failure.",
   },
 };
 
