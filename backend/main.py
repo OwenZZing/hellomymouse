@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -61,6 +61,51 @@ def _cleanup_expired():
         j = jobs[jid]
         if now - j.get("_created", now) > _SESSION_TTL_SECONDS:
             jobs.pop(jid, None)
+    # Drop rate-limit buckets that have no recent entries (prevents unbounded growth).
+    cutoff = now - 120.0
+    with _rate_lock:
+        for k in list(_rate_buckets):
+            bucket = _rate_buckets[k]
+            while bucket and bucket[0] < cutoff:
+                bucket.pop(0)
+            if not bucket:
+                _rate_buckets.pop(k, None)
+
+
+# ── Rate limiting (lightweight in-memory, per-IP) ───────────
+# "살살" — generous defaults, just enough to stop a runaway bot.
+# Shared buckets across workers would need Redis, but single-process is fine here.
+_rate_buckets: dict[str, list[float]] = {}
+_rate_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_check(key: str, max_per_min: int) -> bool:
+    now = time.time()
+    cutoff = now - 60.0
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(key, [])
+        while bucket and bucket[0] < cutoff:
+            bucket.pop(0)
+        if len(bucket) >= max_per_min:
+            return False
+        bucket.append(now)
+        return True
+
+
+def rate_limit(scope: str, max_per_min: int):
+    """FastAPI dependency that enforces a per-IP per-minute limit on a scope."""
+    def dep(request: Request):
+        ip = _client_ip(request)
+        if not _rate_check(f"{scope}:{ip}", max_per_min):
+            raise HTTPException(429, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+    return dep
 
 
 def _cleanup_loop():
@@ -93,6 +138,7 @@ def _safe_filename(name: str) -> str:
 async def upload_files(
     files: list[UploadFile] = File(...),
     ref_files: list[UploadFile] = File(default=[]),
+    _rl=Depends(rate_limit("upload", 10)),
 ):
     session_id = str(uuid.uuid4())
     tmpdir = tempfile.mkdtemp()
@@ -154,7 +200,7 @@ class Stage0Body(BaseModel):
 
 
 @app.post("/api/stage0")
-async def run_stage0(body: Stage0Body):
+async def run_stage0(body: Stage0Body, _rl=Depends(rate_limit("stage0", 20))):
     if body.session_id not in sessions:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
 
@@ -192,7 +238,7 @@ class AnalyzeBody(BaseModel):
 
 
 @app.post("/api/analyze")
-async def start_analysis(body: AnalyzeBody):
+async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10))):
     if body.session_id not in sessions:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
 
@@ -200,7 +246,8 @@ async def start_analysis(body: AnalyzeBody):
     job_id = str(uuid.uuid4())
     queue: asyncio.Queue = asyncio.Queue()
     jobs[job_id] = {"queue": queue, "result_path": None, "error": None, "_created": time.time(),
-                     "api_provider": body.api_provider, "model": body.model}
+                     "api_provider": body.api_provider, "model": body.model,
+                     "session_id": body.session_id}
 
     loop = asyncio.get_event_loop()
 
@@ -265,9 +312,8 @@ class ReviewBody(BaseModel):
 
 
 @app.post("/api/review/{job_id}")
-async def submit_review(job_id: str, body: ReviewBody):
-    if job_id not in jobs:
-        raise HTTPException(404, "Job not found")
+async def submit_review(job_id: str, body: ReviewBody, session: str | None = None):
+    _verify_job_owner(job_id, session)
 
     review = {
         "name":     body.review_name.strip(),
@@ -373,10 +419,19 @@ async def submit_failure_feedback(body: FailureFeedbackBody):
 
 # ── SSE progress stream ───────────────────────────────────────
 
-@app.get("/api/progress/{job_id}")
-async def progress_stream(job_id: str):
+def _verify_job_owner(job_id: str, session_id: str | None):
+    """Ensure the caller knows the session_id that created this job.
+    Raises 404 (not 403) so we don't leak the existence of the job id."""
     if job_id not in jobs:
         raise HTTPException(404, "Job not found")
+    owner = jobs[job_id].get("session_id")
+    if owner and owner != session_id:
+        raise HTTPException(404, "Job not found")
+
+
+@app.get("/api/progress/{job_id}")
+async def progress_stream(job_id: str, session: str | None = None):
+    _verify_job_owner(job_id, session)
 
     queue = jobs[job_id]["queue"]
 
@@ -400,9 +455,8 @@ async def progress_stream(job_id: str):
 # ── Download docx ─────────────────────────────────────────────
 
 @app.get("/api/download/{job_id}")
-async def download(job_id: str):
-    if job_id not in jobs:
-        raise HTTPException(404, "Job not found")
+async def download(job_id: str, session: str | None = None):
+    _verify_job_owner(job_id, session)
     path = jobs[job_id].get("result_path")
     if not path or not os.path.exists(path):
         raise HTTPException(404, "리포트가 아직 준비되지 않았습니다.")
@@ -464,7 +518,12 @@ def _save_widget_all():
 
 @app.post("/api/widget/stairs")
 async def update_stairs(body: StairsBody):
-    if body.secret != os.environ.get("WIDGET_SECRET", "hellomymouse"):
+    expected = os.environ.get("WIDGET_SECRET")
+    if not expected:
+        # Never allow a default — if the server hasn't set WIDGET_SECRET,
+        # reject the write instead of falling back to a guessable string.
+        raise HTTPException(503, "위젯 설정이 초기화되지 않았습니다.")
+    if body.secret != expected:
         raise HTTPException(403, "비밀번호가 틀렸습니다.")
     _load_widget()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

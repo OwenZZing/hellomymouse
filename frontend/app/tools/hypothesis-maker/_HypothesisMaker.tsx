@@ -485,7 +485,8 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   };
 
   const downloadFile = async (id: string) => {
-    const res = await fetch(`${API_URL}/api/download/${id}`);
+    const qs = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
+    const res = await fetch(`${API_URL}/api/download/${id}${qs}`);
     if (!res.ok) {
       throw new Error(`${res.status}`);
     }
@@ -520,7 +521,9 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setJobId(data.job_id);
       setStep("analyze");
 
-      const es = new EventSource(`${API_URL}/api/progress/${data.job_id}`);
+      const es = new EventSource(
+        `${API_URL}/api/progress/${data.job_id}?session=${encodeURIComponent(sessionId)}`
+      );
       es.onmessage = (e) => {
         const d = JSON.parse(e.data);
         if (d.percent >= 0) setProgress(d.percent);
@@ -553,7 +556,8 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const handleSubmitReview = async () => {
     const hasReview = reviewName || reviewField || reviewStars || reviewComment;
     if (hasReview && jobId) {
-      await fetch(`${API_URL}/api/review/${jobId}`, {
+      const qs = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
+      await fetch(`${API_URL}/api/review/${jobId}${qs}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
