@@ -199,6 +199,37 @@ class Stage0Body(BaseModel):
     model: str = ""
 
 
+# ── API key pre-flight check ──────────────────────────────────
+
+class PreflightBody(BaseModel):
+    api_provider: str
+    api_key: str
+    model: str = ""
+
+
+@app.post("/api/preflight")
+async def preflight(body: PreflightBody, _rl=Depends(rate_limit("preflight", 30))):
+    """API 키 + 모델 작동 여부 빠르게 확인. 분석 시작 전 호출 권장."""
+    from analyzer.api_client import APIClient
+    try:
+        client = APIClient(body.api_provider, body.api_key, body.model)
+        # 매우 짧은 요청으로 인증 + 모델 작동 확인
+        client.call(
+            user_prompt="Reply with just 'OK'",
+            system_prompt="",
+            max_tokens=10,
+        )
+        return {"ok": True, "model": client.model}
+    except ValueError as e:
+        # 인증 오류 — 키 문제
+        raise HTTPException(401, str(e))
+    except RuntimeError as e:
+        # API/모델 오류 — 다른 옵션 권장
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"사전 점검 실패: {e}")
+
+
 @app.post("/api/stage0")
 async def run_stage0(body: Stage0Body, _rl=Depends(rate_limit("stage0", 20))):
     if body.session_id not in sessions:

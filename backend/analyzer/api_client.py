@@ -201,6 +201,7 @@ class APIClient:
         messages.append({'role': 'user', 'content': user_prompt})
 
         last_error = None
+        daily_limit_hit = False
         for model in models_to_try:
             try:
                 response = self._client.chat.completions.create(
@@ -214,18 +215,35 @@ class APIClient:
                     'OpenRouter API 키가 올바르지 않습니다. '
                     'openrouter.ai → Keys에서 발급한 키인지 확인하세요.'
                 )
-            except (openai.RateLimitError, openai.NotFoundError) as e:
+            except openai.RateLimitError as e:
                 last_error = e
+                err_msg = str(e).lower()
+                # OpenRouter 계정 일일 한도(free-models-per-day) 감지 — 다른 모델도 똑같이 막힘
+                if 'free-models-per-day' in err_msg or 'daily' in err_msg or 'add 10 credits' in err_msg:
+                    daily_limit_hit = True
+                    break
+                # 업스트림 provider rate limit — 다음 모델 시도
                 time.sleep(2)
                 continue
+            except openai.NotFoundError as e:
+                last_error = e
+                continue  # 모델이 없어진 경우 즉시 다음 모델
             except Exception as e:
                 last_error = e
                 time.sleep(1)
                 continue
 
+        if daily_limit_hit:
+            raise RuntimeError(
+                'OpenRouter 무료 일일 한도(약 50회)를 초과했습니다. '
+                '더 안정적인 무료 옵션은 Gemini 2.5 Flash입니다 (일일 1,500회). '
+                'API 제공자에서 Google Gemini를 선택해보세요. '
+                '또는 OpenRouter에 $10 충전 시 일일 1,000회로 확장됩니다.'
+            )
         raise RuntimeError(
-            f'OpenRouter 무료 모델이 모두 실패했습니다. '
-            f'잠시 후 다시 시도하세요. (마지막 오류: {last_error})'
+            f'OpenRouter 무료 모델이 모두 응답하지 않습니다. '
+            f'잠시 후 다시 시도하거나, Gemini 2.5 Flash(무료, 일일 1,500회)를 사용해보세요. '
+            f'(마지막 오류: {last_error})'
         )
 
     def _call_gemini_with_files(self, user_prompt: str, system_prompt: str,

@@ -93,8 +93,8 @@ function estimateCapacity(paperCount: number, model: string) {
 const PROVIDER_LABELS: Record<Provider, string> = {
   claude: "Claude (Anthropic)",
   openai: "GPT (OpenAI)",
-  gemini: "Gemini (Google)",
-  openrouter: "OpenRouter",
+  gemini: "Gemini (무료★)",
+  openrouter: "OpenRouter (무료)",
 };
 
 // Provider API key signup guides. Links to the exact page where the student
@@ -112,13 +112,13 @@ const PROVIDER_GUIDES: Record<Provider, { url: string; ko: string; en: string }>
   },
   gemini: {
     url: "https://aistudio.google.com/app/apikey",
-    ko: "Google AI Studio → Get API Key. 무료 티어 제공 (분당/일일 호출 제한). 카드 없이 시작 가능하지만 무료 한도 낮음.",
-    en: "Google AI Studio → Get API Key. Free tier available (tight per-minute/daily limits). No card needed but limited.",
+    ko: "★ 무료 사용 추천 ★ Google AI Studio → Get API Key. 카드 없이 무료, 일일 1,500회 (분당 10회). 논문 분석에 가장 안정적인 무료 옵션.",
+    en: "★ RECOMMENDED FREE ★ Google AI Studio → Get API Key. Card-free, 1,500/day (10/min). Most reliable free option for paper analysis.",
   },
   openrouter: {
     url: "https://openrouter.ai/settings/keys",
-    ko: "OpenRouter 가입 → Keys. 카드 없이 :free 모델 사용 가능 (단, 일일 ~50회·분당 20회 제한). 논문 10편 분석 시 1회 정도 가능. 하나가 실패하면 다음 모델로 자동 전환됩니다.",
-    en: "OpenRouter → Keys. :free models work card-free (~50/day & 20/min limit, ~1 run for 10 papers). Auto-fallback to next model on failure.",
+    ko: "OpenRouter → Keys. 카드 없이 :free 모델 사용 가능하나 일일 ~50회 매우 제한적. Gemini가 더 안정적입니다. ($10 충전 시 일일 1,000회로 확장)",
+    en: "OpenRouter → Keys. :free models work card-free but only ~50/day (very limited). Gemini is more reliable. (Top up $10 → 1,000/day)",
   },
 };
 
@@ -769,11 +769,36 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
             </div>
 
             <button
-              disabled={!apiKey.trim()}
-              onClick={() => { setError(""); setStep("upload"); }}
+              disabled={!apiKey.trim() || loading}
+              onClick={async () => {
+                setError("");
+                setLoading(true);
+                try {
+                  const r = await fetch(`${API_URL}/api/preflight`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      api_provider: provider,
+                      api_key: apiKey,
+                      model,
+                    }),
+                  });
+                  if (!r.ok) {
+                    const d = await r.json().catch(() => ({ detail: "" }));
+                    setError(d.detail || (locale === "ko" ? "API 키 또는 모델 점검 실패" : "API key/model check failed"));
+                    setLoading(false);
+                    return;
+                  }
+                  setStep("upload");
+                } catch (e) {
+                  setError(String(e));
+                } finally {
+                  setLoading(false);
+                }
+              }}
               className="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-medium transition-colors"
             >
-              {c.nextBtn}
+              {loading ? (locale === "ko" ? "API 키 점검 중..." : "Checking API key...") : c.nextBtn}
             </button>
 
             {/* ── User reviews ── */}
