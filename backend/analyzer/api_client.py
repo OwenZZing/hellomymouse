@@ -261,16 +261,34 @@ class APIClient:
         return False
 
     def _gemini_generate(self, model: str, contents, max_tokens: int):
-        """Low-level Gemini generate_content call."""
+        """Low-level Gemini generate_content call with 503/overload retry.
+        Gemini Flash 무료 티어는 가끔 503 UNAVAILABLE을 던지는데, 보통 일시적이라
+        exponential backoff로 재시도하면 대부분 성공함."""
         types = self._genai_types
-        return self._client.models.generate_content(
-            model=model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                max_output_tokens=max_tokens,
-                safety_settings=self._safety_settings,
-            ),
-        )
+        last_exc = None
+        # 5회 재시도: 1s, 3s, 7s, 15s, 30s (총 ~56초)
+        for attempt, wait_s in enumerate([1, 3, 7, 15, 30]):
+            try:
+                return self._client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=max_tokens,
+                        safety_settings=self._safety_settings,
+                    ),
+                )
+            except Exception as e:
+                err = str(e).lower()
+                # 503/UNAVAILABLE/overloaded — 재시도 가능
+                if '503' in err or 'unavailable' in err or 'overloaded' in err or 'high demand' in err:
+                    last_exc = e
+                    if attempt < 4:  # 마지막 시도 후엔 sleep 없이 raise
+                        time.sleep(wait_s)
+                        continue
+                # 그 외 오류는 즉시 raise (인증 오류, 안전 필터 등)
+                raise
+        if last_exc:
+            raise last_exc
 
     def _gemini_with_retry(self, user_prompt: str, system_prompt: str,
                            max_tokens: int, files: list = None) -> str:
@@ -306,6 +324,11 @@ class APIClient:
                 raise ValueError(
                     'Gemini API 키가 올바르지 않습니다. '
                     'aistudio.google.com → Get API Key에서 발급한 키인지 확인하세요.'
+                )
+            if '503' in err or 'unavailable' in err or 'overloaded' in err or 'high demand' in err:
+                raise RuntimeError(
+                    'Gemini 서버가 일시적으로 과부하 상태입니다. '
+                    '5분 후 다시 시도하거나, OpenRouter 무료 모델을 사용해보세요.'
                 )
             if 'safety' not in err and 'block' not in err and 'recitation' not in err:
                 raise RuntimeError(f'Gemini API 오류: {e}')
