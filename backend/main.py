@@ -527,6 +527,7 @@ def _load_widget():
 @app.get("/api/widget")
 async def get_widget():
     _load_widget()
+    _rollover_if_new_day()
     return _widget_cache
 
 
@@ -545,6 +546,15 @@ def _save_widget_all():
         _widget_cache.get("usage_count", 0),
         _widget_cache.get("view_count", 0),
     )
+
+
+def _rollover_if_new_day():
+    """button_count와 view_count는 하루 단위로 리셋. last_updated가 오늘이 아니면 0으로."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _widget_cache.get("last_updated") != today:
+        _widget_cache["button_count"] = 0
+        _widget_cache["view_count"] = 0
+        _widget_cache["last_updated"] = today
 
 
 @app.post("/api/widget/stairs")
@@ -570,6 +580,7 @@ async def update_stairs(body: StairsBody):
 @app.post("/api/widget/button")
 async def press_button():
     _load_widget()
+    _rollover_if_new_day()
     _widget_cache["button_count"] += 1
     try:
         _save_widget_all()
@@ -580,11 +591,11 @@ async def press_button():
 
 @app.post("/api/widget/view")
 async def record_view():
-    """Increment the cumulative homepage view counter and return the full
-    widget state in one call (so the frontend can render stairs + views from
-    a single request). Frontend is expected to gate this per session
-    (sessionStorage) to avoid refresh-spam inflation."""
+    """Increment today's homepage view counter (하루 단위 리셋) and return the full
+    widget state in one call. Frontend gates this per session (sessionStorage)
+    to avoid refresh-spam inflation."""
     _load_widget()
+    _rollover_if_new_day()
     _widget_cache["view_count"] = _widget_cache.get("view_count", 0) + 1
     try:
         _save_widget_all()

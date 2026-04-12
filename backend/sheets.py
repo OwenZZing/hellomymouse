@@ -107,20 +107,28 @@ def append_failure(entry: dict):
 
 
 def get_widget() -> dict:
+    from datetime import datetime, timezone
     ws = _sheet("Stairs")
     rows = ws.get_all_values()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if len(rows) <= 1:
         return {"stairs": 0, "button_count": 0, "last_updated": "",
                 "usage_count": 0, "view_count": 0}
-    # usage_count / view_count are cumulative — scan all rows so pre-migration
-    # rows (missing the new columns) don't reset the totals.
+    # usage_count는 계속 누적 (총 사용 횟수 유지)
     max_usage = _max_col_value(rows, 3)
-    max_views = _max_col_value(rows, 4)
     last = rows[-1]
+    last_date = last[0]
+    # button_count, view_count: 오늘 row가 있으면 오늘 값, 없으면 0 (하루 단위 리셋)
+    if last_date == today:
+        today_button = int(last[2]) if len(last) > 2 and last[2] else 0
+        today_views = int(last[4]) if len(last) > 4 and last[4] else 0
+    else:
+        today_button = 0
+        today_views = 0
     return {
         "stairs": int(last[1]) if last[1] else 0,
-        "button_count": int(last[2]) if len(last) > 2 and last[2] else 0,
-        "last_updated": last[0],
+        "button_count": today_button,
+        "last_updated": last_date,
         "usage_count": max_usage,
-        "view_count": max_views,
+        "view_count": today_views,
     }
