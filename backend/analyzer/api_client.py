@@ -1,7 +1,7 @@
-"""Unified AI API client supporting Claude, OpenAI, and Gemini."""
+"""Unified AI API client supporting Claude, OpenAI, Gemini, and OpenRouter."""
 from __future__ import annotations
 import time
-from config import DEFAULT_MODELS
+from config import DEFAULT_MODELS, OPENROUTER_FREE_MODELS
 
 # Gemini models known to have stricter safety enforcement
 _GEMINI_STRICT_MODELS = {'gemini-2.5-flash', 'gemini-2.5-pro'}
@@ -41,8 +41,6 @@ class APIClient:
             raise ImportError('openai package not installed. Run: pip install openai')
 
     def _init_openrouter(self):
-        """OpenRouter is OpenAI-compatible — reuse the OpenAI SDK with a custom base_url.
-        Attribution headers are recommended by OpenRouter for free-tier usage tracking."""
         try:
             import openai
             self._client = openai.OpenAI(
@@ -127,10 +125,12 @@ class APIClient:
         max_tokens = min(max_tokens, safe_max)
         if self.provider == 'claude':
             return self._call_claude(user_prompt, system_prompt, max_tokens)
-        elif self.provider in ('openai', 'openrouter'):
+        elif self.provider == 'openai':
             return self._call_openai(user_prompt, system_prompt, max_tokens)
         elif self.provider == 'gemini':
             return self._call_gemini(user_prompt, system_prompt, max_tokens)
+        elif self.provider == 'openrouter':
+            return self._call_openrouter(user_prompt, system_prompt, max_tokens)
 
     def _call_claude(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
         # Use streaming for ALL Claude calls. Non-streaming requests that may
@@ -182,6 +182,49 @@ class APIClient:
         except Exception as e:
             label = 'OpenRouter' if self.provider == 'openrouter' else 'OpenAI'
             raise RuntimeError(f'{label} API 오류: {e}')
+
+    def _call_openrouter(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
+        """OpenRouter 무료 모델 fallback 체인으로 호출."""
+        import openai
+
+        # 현재 모델을 첫 번째로 시도하고, 나머지 fallback 모델 순회
+        models_to_try = [self.model]
+        for m in OPENROUTER_FREE_MODELS:
+            if m != self.model:
+                models_to_try.append(m)
+
+        messages = []
+        if system_prompt:
+            messages.append({'role': 'system', 'content': system_prompt})
+        messages.append({'role': 'user', 'content': user_prompt})
+
+        last_error = None
+        for model in models_to_try:
+            try:
+                response = self._client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content
+            except openai.AuthenticationError:
+                raise ValueError(
+                    'OpenRouter API 키가 올바르지 않습니다. '
+                    'openrouter.ai → Keys에서 발급한 키인지 확인하세요.'
+                )
+            except (openai.RateLimitError, openai.NotFoundError) as e:
+                last_error = e
+                time.sleep(2)
+                continue
+            except Exception as e:
+                last_error = e
+                time.sleep(1)
+                continue
+
+        raise RuntimeError(
+            f'OpenRouter 무료 모델이 모두 실패했습니다. '
+            f'잠시 후 다시 시도하세요. (마지막 오류: {last_error})'
+        )
 
     def _call_gemini_with_files(self, user_prompt: str, system_prompt: str,
                                 files: list, max_tokens: int) -> str:

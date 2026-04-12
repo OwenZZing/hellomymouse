@@ -2,10 +2,18 @@ DEFAULT_MODELS = {
     'claude': 'claude-sonnet-4-6',
     'openai': 'gpt-4o',
     'gemini': 'gemini-2.5-flash',
-    # OpenRouter: OpenAI-compatible gateway to many models.
-    # Default: DeepSeek Chat — very cheap, good at JSON-structured output.
-    'openrouter': 'deepseek/deepseek-chat',
+    'openrouter': 'qwen/qwen3-coder:free',
 }
+
+# OpenRouter 무료 모델 fallback 체인 — 하나가 죽으면 다음 모델로 자동 전환
+OPENROUTER_FREE_MODELS = [
+    'qwen/qwen3-coder:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
+    'google/gemma-3-27b-it:free',
+    'minimax/minimax-m2.5:free',
+]
 
 MODEL_OPTIONS = {
     'claude': [
@@ -23,18 +31,5 @@ MODEL_OPTIONS = {
     'gemini': [
         'gemini-2.5-flash',
     ],
-    # OpenRouter lets users type any model ID from openrouter.ai/models.
-    # This list mixes :free variants (no card required, tight rate limit)
-    # and paid variants (very cheap, ~$0.05–0.2 per 5-paper run).
-    'openrouter': [
-        # ── Free tier (no payment, but ~50/day & 20/min limit) ──
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'deepseek/deepseek-r1:free',
-        'deepseek/deepseek-chat-v3-0324:free',
-        # ── Paid (very cheap, no rate limit headaches) ──
-        'deepseek/deepseek-chat',
-        'deepseek/deepseek-r1',
-        'meta-llama/llama-3.3-70b-instruct',
-        'qwen/qwen-2.5-72b-instruct',
-    ],
+    'openrouter': OPENROUTER_FREE_MODELS,
 }
