@@ -756,7 +756,15 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-zinc-100 focus:outline-none focus:border-violet-500 transition-colors"
               >
-                {MODELS[provider].map((m) => <option key={m} value={m}>{m}</option>)}
+                {MODELS[provider].map((m) => {
+                  const cap = MODEL_OUTPUT_CAP[m] ?? 8192;
+                  const maxPapers = Math.max(1, Math.floor((cap * 0.85 - 4000) / 2000));
+                  return (
+                    <option key={m} value={m}>
+                      {m} ({locale === "en" ? `≤${maxPapers} papers` : `≤${maxPapers}편 권장`})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
