@@ -90,11 +90,19 @@ function estimateCapacity(paperCount: number, model: string) {
   return { cap, estimated, ratio, maxSafe };
 }
 
-const PROVIDER_LABELS: Record<Provider, string> = {
-  claude: "Claude (Anthropic)",
-  openai: "GPT (OpenAI)",
-  gemini: "Gemini (무료★)",
-  openrouter: "OpenRouter (무료)",
+const PROVIDER_LABELS: Record<Locale, Record<Provider, string>> = {
+  ko: {
+    claude: "Claude (Anthropic)",
+    openai: "GPT (OpenAI)",
+    gemini: "Gemini (무료★)",
+    openrouter: "OpenRouter (무료)",
+  },
+  en: {
+    claude: "Claude (Anthropic)",
+    openai: "GPT (OpenAI)",
+    gemini: "Gemini (Free★)",
+    openrouter: "OpenRouter (Free)",
+  },
 };
 
 // Provider API key signup guides. Links to the exact page where the student
@@ -705,7 +713,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                         : "border-zinc-700 text-zinc-500 hover:border-zinc-500"
                     }`}
                   >
-                    {PROVIDER_LABELS[p]}
+                    {PROVIDER_LABELS[locale][p]}
                   </button>
                 ))}
               </div>
