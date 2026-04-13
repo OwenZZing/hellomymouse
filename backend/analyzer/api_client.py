@@ -1,7 +1,7 @@
-"""Unified AI API client supporting Claude, OpenAI, and Gemini."""
+"""Unified AI API client supporting Claude, OpenAI, Gemini, and OpenRouter."""
 from __future__ import annotations
 import time
-from config import DEFAULT_MODELS
+from config import DEFAULT_MODELS, OPENROUTER_FREE_MODELS
 
 # Gemini models known to have stricter safety enforcement
 _GEMINI_STRICT_MODELS = {'gemini-2.5-flash', 'gemini-2.5-pro'}
@@ -41,13 +41,13 @@ class APIClient:
             raise ImportError('openai package not installed. Run: pip install openai')
 
     def _init_openrouter(self):
-        """OpenRouter is OpenAI-compatible — reuse the OpenAI SDK with a custom base_url.
-        Attribution headers are recommended by OpenRouter for free-tier usage tracking."""
         try:
             import openai
+            import httpx
             self._client = openai.OpenAI(
                 api_key=self.api_key,
                 base_url='https://openrouter.ai/api/v1',
+                timeout=httpx.Timeout(300.0, connect=30.0),
                 default_headers={
                     'HTTP-Referer': 'https://hellomymouse.com',
                     'X-Title': 'Hypothesis Maker',
@@ -113,24 +113,26 @@ class APIClient:
         'o1':                           32768,
         'o1-mini':                      65536,
         'o3-mini':                      65536,
-        # Gemini
-        'gemini-2.5-pro':                8192,
-        'gemini-2.5-flash':              8192,
+        # Gemini 2.5 — Flash supports 64K, Pro supports 64K
+        'gemini-2.5-pro':               65536,
+        'gemini-2.5-flash':             65536,
     }
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
         """Send prompt and return response text."""
-        # OpenRouter models aren't in the static _MAX_TOKENS table (too many to
-        # enumerate). Use 8192 as a safe default — most chat models support this.
-        default_cap = 8192 if self.provider == 'openrouter' else max_tokens
+        # OpenRouter free models generally support 16K–32K output.
+        # Use 16384 as a safe default for models not in the table.
+        default_cap = 16384 if self.provider == 'openrouter' else max_tokens
         safe_max = self._MAX_TOKENS.get(self.model, default_cap)
         max_tokens = min(max_tokens, safe_max)
         if self.provider == 'claude':
             return self._call_claude(user_prompt, system_prompt, max_tokens)
-        elif self.provider in ('openai', 'openrouter'):
+        elif self.provider == 'openai':
             return self._call_openai(user_prompt, system_prompt, max_tokens)
         elif self.provider == 'gemini':
             return self._call_gemini(user_prompt, system_prompt, max_tokens)
+        elif self.provider == 'openrouter':
+            return self._call_openrouter(user_prompt, system_prompt, max_tokens)
 
     def _call_claude(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
         # Use streaming for ALL Claude calls. Non-streaming requests that may
@@ -183,6 +185,67 @@ class APIClient:
             label = 'OpenRouter' if self.provider == 'openrouter' else 'OpenAI'
             raise RuntimeError(f'{label} API 오류: {e}')
 
+    def _call_openrouter(self, user_prompt: str, system_prompt: str, max_tokens: int) -> str:
+        """OpenRouter 무료 모델 fallback 체인으로 호출."""
+        import openai
+
+        # 현재 모델을 첫 번째로 시도하고, 나머지 fallback 모델 순회
+        models_to_try = [self.model]
+        for m in OPENROUTER_FREE_MODELS:
+            if m != self.model:
+                models_to_try.append(m)
+
+        messages = []
+        if system_prompt:
+            messages.append({'role': 'system', 'content': system_prompt})
+        messages.append({'role': 'user', 'content': user_prompt})
+
+        last_error = None
+        daily_limit_hit = False
+        for model in models_to_try:
+            try:
+                response = self._client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content
+            except openai.AuthenticationError:
+                raise ValueError(
+                    'OpenRouter API 키가 올바르지 않습니다. '
+                    'openrouter.ai → Keys에서 발급한 키인지 확인하세요.'
+                )
+            except openai.RateLimitError as e:
+                last_error = e
+                err_msg = str(e).lower()
+                # OpenRouter 계정 일일 한도(free-models-per-day) 감지 — 다른 모델도 똑같이 막힘
+                if 'free-models-per-day' in err_msg or 'daily' in err_msg or 'add 10 credits' in err_msg:
+                    daily_limit_hit = True
+                    break
+                # 업스트림 provider rate limit — 다음 모델 시도
+                time.sleep(2)
+                continue
+            except openai.NotFoundError as e:
+                last_error = e
+                continue  # 모델이 없어진 경우 즉시 다음 모델
+            except Exception as e:
+                last_error = e
+                time.sleep(1)
+                continue
+
+        if daily_limit_hit:
+            raise RuntimeError(
+                'OpenRouter 무료 일일 한도(약 50회)를 초과했습니다. '
+                '더 안정적인 무료 옵션은 Gemini 2.5 Flash입니다 (일일 1,500회). '
+                'API 제공자에서 Google Gemini를 선택해보세요. '
+                '또는 OpenRouter에 $10 충전 시 일일 1,000회로 확장됩니다.'
+            )
+        raise RuntimeError(
+            f'OpenRouter 무료 모델이 모두 응답하지 않습니다. '
+            f'잠시 후 다시 시도하거나, Gemini 2.5 Flash(무료, 일일 1,500회)를 사용해보세요. '
+            f'(마지막 오류: {last_error})'
+        )
+
     def _call_gemini_with_files(self, user_prompt: str, system_prompt: str,
                                 files: list, max_tokens: int) -> str:
         return self._gemini_with_retry(user_prompt, system_prompt, max_tokens,
@@ -198,16 +261,34 @@ class APIClient:
         return False
 
     def _gemini_generate(self, model: str, contents, max_tokens: int):
-        """Low-level Gemini generate_content call."""
+        """Low-level Gemini generate_content call with 503/overload retry.
+        Gemini Flash 무료 티어는 가끔 503 UNAVAILABLE을 던지는데, 보통 일시적이라
+        exponential backoff로 재시도하면 대부분 성공함."""
         types = self._genai_types
-        return self._client.models.generate_content(
-            model=model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                max_output_tokens=max_tokens,
-                safety_settings=self._safety_settings,
-            ),
-        )
+        last_exc = None
+        # 5회 재시도: 1s, 3s, 7s, 15s, 30s (총 ~56초)
+        for attempt, wait_s in enumerate([1, 3, 7, 15, 30]):
+            try:
+                return self._client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=max_tokens,
+                        safety_settings=self._safety_settings,
+                    ),
+                )
+            except Exception as e:
+                err = str(e).lower()
+                # 503/UNAVAILABLE/overloaded — 재시도 가능
+                if '503' in err or 'unavailable' in err or 'overloaded' in err or 'high demand' in err:
+                    last_exc = e
+                    if attempt < 4:  # 마지막 시도 후엔 sleep 없이 raise
+                        time.sleep(wait_s)
+                        continue
+                # 그 외 오류는 즉시 raise (인증 오류, 안전 필터 등)
+                raise
+        if last_exc:
+            raise last_exc
 
     def _gemini_with_retry(self, user_prompt: str, system_prompt: str,
                            max_tokens: int, files: list = None) -> str:
@@ -243,6 +324,11 @@ class APIClient:
                 raise ValueError(
                     'Gemini API 키가 올바르지 않습니다. '
                     'aistudio.google.com → Get API Key에서 발급한 키인지 확인하세요.'
+                )
+            if '503' in err or 'unavailable' in err or 'overloaded' in err or 'high demand' in err:
+                raise RuntimeError(
+                    'Gemini 서버가 일시적으로 과부하 상태입니다. '
+                    '5분 후 다시 시도하거나, OpenRouter 무료 모델을 사용해보세요.'
                 )
             if 'safety' not in err and 'block' not in err and 'recitation' not in err:
                 raise RuntimeError(f'Gemini API 오류: {e}')

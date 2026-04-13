@@ -162,9 +162,6 @@ def build_report(data: dict, output_path: str) -> str:
     # ── Section 0-B: Projects ────────────────────────────────
     _build_section0(doc, projects, lab_overview, assigned_project)
 
-    # ── Flip to landscape for all table-heavy sections ──────
-    start_landscape(doc)
-
     # ── Section 1: Lab Capabilities ──────────────────────────
     _build_section1(doc, capabilities)
 
