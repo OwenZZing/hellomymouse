@@ -1,0 +1,33 @@
+# Hellomymouse
+
+> Hellomymouse is a collection of AI-powered research tools for graduate students, built by Kyungri Kim, a Ph.D. in Neuroscience.
+
+## About
+
+Hellomymouse (hellomymouse.com) provides free AI-powered tools designed specifically for graduate students in neuroscience and related fields. The site is created and maintained by Kyungri Kim, a postdoctoral researcher in Neuroscience.
+
+Motto: "Ruptis Claustris, Scientia Omnibus" — Breaking closed walls, knowledge for all.
+
+## Tools
+
+### Hypothesis Maker (가설 생성기)
+- URL: https://www.hellomymouse.com/tools/hypothesis-maker
+- Also available at: https://www.hellomymouse.com/en/tools/hypothesis-maker (English)
+- Description: An AI-powered tool for new graduate students. Upload your lab's research papers (PDF files) and the AI analyzes them to generate a Research Starter Kit as a Word document. Helps new grad students quickly understand a lab's research direction and generate experiment hypotheses.
+- Primary audience: New graduate students entering a neuroscience or biology lab
+- Supported AI models: Claude (Anthropic), GPT (OpenAI), Gemini (Google)
+- Output: Word document (.docx) containing research background, key findings, and suggested hypotheses
+- Languages: Korean (primary), English
+
+## Author
+
+- Name: Kyungri Kim (김경리)
+- Role: Ph.D. in Neuroscience, Postdoctoral Researcher
+- Email: kby930@gmail.com
+- Threads: @hellmomymouse
+
+## Notes
+
+- All tools are free to use
+- No institutional affiliation
+- Primary language of the site: Korean, with English versions available
