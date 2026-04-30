@@ -11,6 +11,15 @@ frontend/.next/
 frontend/node_modules/
 frontend/.env.local
 
+# Secrets
+.env
+.env.local
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+
 # Misc
 .DS_Store
 Thumbs.db
