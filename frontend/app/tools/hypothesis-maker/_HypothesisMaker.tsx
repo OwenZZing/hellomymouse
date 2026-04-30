@@ -45,8 +45,8 @@ interface Project {
 type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
 
 const MODELS: Record<Provider, string[]> = {
-  claude: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
+  claude: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
+  openai: ["gpt-5.5", "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
   gemini: ["gemini-2.5-flash"],
   openrouter: [
     "nvidia/nemotron-3-super-120b-a12b:free",
@@ -60,10 +60,12 @@ const MODELS: Record<Provider, string[]> = {
 
 // Per-model output token cap (must mirror backend analyzer/api_client.py::_MAX_TOKENS)
 const MODEL_OUTPUT_CAP: Record<string, number> = {
+  "claude-opus-4-7": 32000,
   "claude-sonnet-4-6": 64000,
   "claude-opus-4-6": 32000,
   "claude-haiku-4-5-20251001": 16000,
   "claude-3-5-sonnet-20241022": 8192,
+  "gpt-5.5": 16384,
   "gpt-4o": 16384,
   "gpt-4o-mini": 16384,
   "gpt-4-turbo": 4096,

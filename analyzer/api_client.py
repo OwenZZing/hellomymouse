@@ -63,6 +63,7 @@ class APIClient:
     # Per-model safe output token caps
     _MAX_TOKENS = {
         # Claude 4
+        'claude-opus-4-7':              32000,
         'claude-opus-4-6':              32000,
         'claude-sonnet-4-6':            16000,
         # Claude 3.5
@@ -72,6 +73,7 @@ class APIClient:
         'claude-3-opus-20240229':        4096,
         'claude-haiku-4-5-20251001':     8192,
         # OpenAI
+        'gpt-5.5':                      16384,
         'gpt-4o':                       16384,
         'gpt-4o-mini':                  16384,
         'gpt-4-turbo':                   4096,

@@ -97,6 +97,7 @@ class APIClient:
     # Per-model safe output token caps (match each model's actual limit)
     _MAX_TOKENS = {
         # Claude 4.x — Sonnet supports 64K, Opus/Haiku 32K
+        'claude-opus-4-7':              32000,
         'claude-opus-4-6':              32000,
         'claude-sonnet-4-6':            64000,
         'claude-haiku-4-5-20251001':    16000,
@@ -106,6 +107,7 @@ class APIClient:
         # Claude 3
         'claude-3-opus-20240229':        4096,
         # OpenAI
+        'gpt-5.5':                      16384,
         'gpt-4o':                       16384,
         'gpt-4o-mini':                  16384,
         'gpt-4-turbo':                   4096,

@@ -17,12 +17,14 @@ OPENROUTER_FREE_MODELS = [
 
 MODEL_OPTIONS = {
     'claude': [
+        'claude-opus-4-7',
         'claude-opus-4-6',
         'claude-sonnet-4-6',
         'claude-haiku-4-5-20251001',
         'claude-3-5-sonnet-20241022',
     ],
     'openai': [
+        'gpt-5.5',
         'gpt-4o',
         'gpt-4o-mini',
         'gpt-4-turbo',
