@@ -68,11 +68,12 @@ const tools = [
     status: "live",
   },
   {
-    slug: null,
-    name: "Coming Soon",
-    description: "More tools in the works.",
-    tags: [],
-    status: "soon",
+    slug: "surgery-trainer",
+    name: "Mouse Stereotaxic Surgery Trainer",
+    description:
+      "A no-animal educational simulator for practicing stereotaxic surgery workflow logic, coordinate checks, aseptic technique, welfare monitoring, recovery, and documentation.",
+    tags: ["No-animal training", "Neuroscience", "Bilingual"],
+    status: "live",
   },
   {
     slug: null,

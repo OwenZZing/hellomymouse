@@ -208,8 +208,9 @@ class AnalysisPipeline:
 
         prompt = build_stage2_prompt(paper_analyses, assigned_project,
                                      professor_instructions, detected_field)
+        stage2_max_tokens = 128000
         try:
-            response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=16000)
+            response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=stage2_max_tokens)
         finally:
             _stop.set()
 
@@ -223,7 +224,7 @@ class AnalysisPipeline:
                 if attempt == 0:
                     self._progress('JSON 파싱 실패 — 자동 재시도 중...', 72)
                     try:
-                        response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=16000)
+                        response = self.api.call(prompt, STAGE_2_SYSTEM, max_tokens=stage2_max_tokens)
                     except Exception as retry_err:
                         raise RuntimeError(f'재시도 중 API 오류: {retry_err}')
                 else:

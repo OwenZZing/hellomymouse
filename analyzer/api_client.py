@@ -62,28 +62,29 @@ class APIClient:
 
     # Per-model safe output token caps
     _MAX_TOKENS = {
-        # Claude 4
-        'claude-opus-4-7':              32000,
-        'claude-opus-4-6':              32000,
-        'claude-sonnet-4-6':            16000,
-        # Claude 3.5
-        'claude-3-5-sonnet-20241022':    8192,
-        'claude-3-5-haiku-20241022':     8192,
-        # Claude 3
-        'claude-3-opus-20240229':        4096,
-        'claude-haiku-4-5-20251001':     8192,
+        # Claude 4.x
+        'claude-opus-4-8':             128000,
+        'claude-sonnet-4-6':            64000,
+        'claude-haiku-4-5-20251001':    64000,
         # OpenAI
-        'gpt-5.5':                      16384,
+        'gpt-5.5':                     128000,
+        'gpt-5.4':                     128000,
+        'gpt-5.4-mini':                128000,
+        'gpt-5.4-nano':                128000,
         'gpt-4o':                       16384,
-        'gpt-4o-mini':                  16384,
-        'gpt-4-turbo':                   4096,
-        'gpt-4':                         4096,
-        'o1':                           32768,
-        'o1-mini':                      65536,
-        'o3-mini':                      65536,
         # Gemini
-        'gemini-2.5-pro':                8192,
-        'gemini-2.5-flash':              8192,
+        'gemini-3.5-flash':             65536,
+        'gemini-2.5-pro':               65536,
+        'gemini-2.5-flash':             65536,
+        'gemini-2.5-flash-lite':        65536,
+        # OpenRouter free models
+        'openrouter/free':               16384,
+        'deepseek/deepseek-v4-flash:free': 128000,
+        'nvidia/nemotron-3-super-120b-a12b:free': 128000,
+        'qwen/qwen3-next-80b-a3b-instruct:free': 32768,
+        'openai/gpt-oss-120b:free':      65536,
+        'google/gemma-4-31b-it:free':    32768,
+        'minimax/minimax-m2.5:free':      8192,
     }
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
@@ -128,7 +129,7 @@ class APIClient:
             response = self._client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
             )
             return response.choices[0].message.content
         except openai.AuthenticationError:
@@ -156,10 +157,11 @@ class APIClient:
         last_error = None
         for model in models_to_try:
             try:
+                model_max_tokens = min(max_tokens, self._MAX_TOKENS.get(model, 16384))
                 response = self._client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    max_tokens=max_tokens,
+                    max_tokens=model_max_tokens,
                 )
                 return response.choices[0].message.content
             except openai.AuthenticationError:

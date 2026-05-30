@@ -4,7 +4,12 @@ import time
 from config import DEFAULT_MODELS, OPENROUTER_FREE_MODELS
 
 # Gemini models known to have stricter safety enforcement
-_GEMINI_STRICT_MODELS = {'gemini-2.5-flash', 'gemini-2.5-pro'}
+_GEMINI_STRICT_MODELS = {
+    'gemini-3.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+}
 # Fallback model when a strict model gets safety-blocked
 _GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
 
@@ -96,28 +101,29 @@ class APIClient:
 
     # Per-model safe output token caps (match each model's actual limit)
     _MAX_TOKENS = {
-        # Claude 4.x — Sonnet supports 64K, Opus/Haiku 32K
-        'claude-opus-4-7':              32000,
-        'claude-opus-4-6':              32000,
+        # Claude 4.x
+        'claude-opus-4-8':             128000,
         'claude-sonnet-4-6':            64000,
-        'claude-haiku-4-5-20251001':    16000,
-        # Claude 3.5
-        'claude-3-5-sonnet-20241022':    8192,
-        'claude-3-5-haiku-20241022':     8192,
-        # Claude 3
-        'claude-3-opus-20240229':        4096,
+        'claude-haiku-4-5-20251001':    64000,
         # OpenAI
-        'gpt-5.5':                      16384,
+        'gpt-5.5':                     128000,
+        'gpt-5.4':                     128000,
+        'gpt-5.4-mini':                128000,
+        'gpt-5.4-nano':                128000,
         'gpt-4o':                       16384,
-        'gpt-4o-mini':                  16384,
-        'gpt-4-turbo':                   4096,
-        'gpt-4':                         4096,
-        'o1':                           32768,
-        'o1-mini':                      65536,
-        'o3-mini':                      65536,
-        # Gemini 2.5 — Flash supports 64K, Pro supports 64K
+        # Gemini
+        'gemini-3.5-flash':             65536,
         'gemini-2.5-pro':               65536,
         'gemini-2.5-flash':             65536,
+        'gemini-2.5-flash-lite':        65536,
+        # OpenRouter free models
+        'openrouter/free':               16384,
+        'deepseek/deepseek-v4-flash:free': 128000,
+        'nvidia/nemotron-3-super-120b-a12b:free': 128000,
+        'qwen/qwen3-next-80b-a3b-instruct:free': 32768,
+        'openai/gpt-oss-120b:free':      65536,
+        'google/gemma-4-31b-it:free':    32768,
+        'minimax/minimax-m2.5:free':      8192,
     }
 
     def call(self, user_prompt: str, system_prompt: str = '', max_tokens: int = 4096) -> str:
@@ -173,7 +179,7 @@ class APIClient:
             response = self._client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
             )
             return response.choices[0].message.content
         except openai.AuthenticationError:
@@ -206,10 +212,11 @@ class APIClient:
         daily_limit_hit = False
         for model in models_to_try:
             try:
+                model_max_tokens = min(max_tokens, self._MAX_TOKENS.get(model, 16384))
                 response = self._client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    max_tokens=max_tokens,
+                    max_tokens=model_max_tokens,
                 )
                 return response.choices[0].message.content
             except openai.AuthenticationError:
@@ -238,13 +245,13 @@ class APIClient:
         if daily_limit_hit:
             raise RuntimeError(
                 'OpenRouter 무료 일일 한도(약 50회)를 초과했습니다. '
-                '더 안정적인 무료 옵션은 Gemini 2.5 Flash입니다 (일일 1,500회). '
+                '더 안정적인 무료 옵션은 Gemini 3.5 Flash입니다. '
                 'API 제공자에서 Google Gemini를 선택해보세요. '
                 '또는 OpenRouter에 $10 충전 시 일일 1,000회로 확장됩니다.'
             )
         raise RuntimeError(
             f'OpenRouter 무료 모델이 모두 응답하지 않습니다. '
-            f'잠시 후 다시 시도하거나, Gemini 2.5 Flash(무료, 일일 1,500회)를 사용해보세요. '
+            f'잠시 후 다시 시도하거나, Gemini 3.5 Flash를 사용해보세요. '
             f'(마지막 오류: {last_error})'
         )
 

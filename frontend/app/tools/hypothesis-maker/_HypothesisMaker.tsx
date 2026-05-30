@@ -45,14 +45,15 @@ interface Project {
 type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
 
 const MODELS: Record<Provider, string[]> = {
-  claude: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
-  openai: ["gpt-5.5", "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini"],
-  gemini: ["gemini-2.5-flash"],
+  claude: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+  openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-4o"],
+  gemini: ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
   openrouter: [
+    "openrouter/free",
+    "deepseek/deepseek-v4-flash:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "qwen/qwen3-coder:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
     "minimax/minimax-m2.5:free",
   ],
@@ -60,24 +61,26 @@ const MODELS: Record<Provider, string[]> = {
 
 // Per-model output token cap (must mirror backend analyzer/api_client.py::_MAX_TOKENS)
 const MODEL_OUTPUT_CAP: Record<string, number> = {
-  "claude-opus-4-7": 32000,
+  "claude-opus-4-8": 128000,
   "claude-sonnet-4-6": 64000,
-  "claude-opus-4-6": 32000,
-  "claude-haiku-4-5-20251001": 16000,
-  "claude-3-5-sonnet-20241022": 8192,
-  "gpt-5.5": 16384,
+  "claude-haiku-4-5-20251001": 64000,
+  "gpt-5.5": 128000,
+  "gpt-5.4": 128000,
+  "gpt-5.4-mini": 128000,
+  "gpt-5.4-nano": 128000,
   "gpt-4o": 16384,
-  "gpt-4o-mini": 16384,
-  "gpt-4-turbo": 4096,
-  "o1-mini": 65536,
+  "gemini-3.5-flash": 65536,
+  "gemini-2.5-pro": 65536,
   "gemini-2.5-flash": 65536,
+  "gemini-2.5-flash-lite": 65536,
   // OpenRouter free models — caps from openrouter.ai/api/v1/models
-  "qwen/qwen3-coder:free": 32768,
-  "nousresearch/hermes-3-llama-3.1-405b:free": 16384,
-  "meta-llama/llama-3.3-70b-instruct:free": 16384,
-  "nvidia/nemotron-3-super-120b-a12b:free": 32768,
-  "google/gemma-4-31b-it:free": 16384,
-  "minimax/minimax-m2.5:free": 32768,
+  "openrouter/free": 16384,
+  "deepseek/deepseek-v4-flash:free": 128000,
+  "nvidia/nemotron-3-super-120b-a12b:free": 128000,
+  "qwen/qwen3-next-80b-a3b-instruct:free": 32768,
+  "openai/gpt-oss-120b:free": 65536,
+  "google/gemma-4-31b-it:free": 32768,
+  "minimax/minimax-m2.5:free": 8192,
 };
 
 // Empirical: Stage 2A output costs ~2000 tokens per paper + ~4000 fixed
@@ -117,18 +120,18 @@ const PROVIDER_GUIDES: Record<Provider, { url: string; ko: string; en: string }>
   },
   openai: {
     url: "https://platform.openai.com/api-keys",
-    ko: "OpenAI Platform → API Keys. 카드 등록 + 선결제 필요. GPT-4o 기준 Claude와 유사한 비용.",
-    en: "OpenAI Platform → API Keys. Card + prepay required. GPT-4o cost similar to Claude.",
+    ko: "OpenAI Platform → API Keys. 카드 등록 + 선결제 필요. GPT-5.4-mini는 비용/품질 균형형, GPT-5.5는 최고성능 옵션입니다.",
+    en: "OpenAI Platform → API Keys. Card + prepay required. GPT-5.4-mini balances cost/quality; GPT-5.5 is the top-capability option.",
   },
   gemini: {
     url: "https://aistudio.google.com/app/apikey",
-    ko: "★ 무료 사용 추천 ★ Google AI Studio → Get API Key. 카드 없이 무료, 일일 1,500회 (분당 10회). 논문 분석에 가장 안정적인 무료 옵션.",
-    en: "★ RECOMMENDED FREE ★ Google AI Studio → Get API Key. Card-free, 1,500/day (10/min). Most reliable free option for paper analysis.",
+    ko: "★ 무료 사용 추천 ★ Google AI Studio → Get API Key. 카드 없이 시작 가능. Gemini 3.5 Flash가 기본 추천 모델입니다.",
+    en: "★ RECOMMENDED FREE ★ Google AI Studio → Get API Key. Card-free start available. Gemini 3.5 Flash is the default recommended model.",
   },
   openrouter: {
     url: "https://openrouter.ai/settings/keys",
-    ko: "OpenRouter → Keys. 카드 없이 :free 모델 사용 가능하나 일일 ~50회 매우 제한적. Gemini가 더 안정적입니다. ($10 충전 시 일일 1,000회로 확장)",
-    en: "OpenRouter → Keys. :free models work card-free but only ~50/day (very limited). Gemini is more reliable. (Top up $10 → 1,000/day)",
+    ko: "OpenRouter → Keys. `openrouter/free`는 사용 가능한 무료 모델을 자동 선택합니다. 무료 한도는 변동될 수 있어 Gemini가 더 안정적입니다.",
+    en: "OpenRouter → Keys. `openrouter/free` automatically routes to available free models. Free limits can change, so Gemini is usually more reliable.",
   },
 };
 
@@ -177,7 +180,7 @@ const COPY = {
     instrLabel: "추가 지시사항 (선택사항)",
     instrPlaceholder: "예: '교수님이 소프트 로봇 그리퍼 쪽을 맡아보라고 하셨어요' 또는 '특히 에너지 효율 관련 가설을 중점적으로 뽑아주세요'",
     costTitle: "비용 안내",
-    costDesc: "논문 5편 기준 약 Claude Sonnet $0.5~1 / GPT-4o $1~2 / Gemini Flash $0.1~0.5 / OpenRouter(DeepSeek) $0.05~0.2",
+    costDesc: "비용은 모델·논문 수·출력 길이에 따라 달라집니다. 무료 시작은 Gemini 3.5 Flash 또는 OpenRouter free, 최고 품질은 Claude Opus 4.8 / GPT-5.5, 균형형은 Claude Sonnet 4.6 / GPT-5.4-mini를 권장합니다.",
     capacityWarnTitle: (n: number, model: string) => `⚠ 논문 ${n}편 × ${model}`,
     capacityWarnBody: (maxSafe: number) =>
       `선택한 모델의 출력 한도에 가까워 결과가 잘릴 수 있습니다. 논문을 ${maxSafe}편 이하로 줄이거나 Claude Sonnet 4.6(64K 출력) 사용을 권장합니다.`,
@@ -258,7 +261,7 @@ const COPY = {
     instrLabel: "Additional instructions (optional)",
     instrPlaceholder: "e.g. 'My PI told me to focus on soft robotic grippers' or 'Emphasize energy-efficiency hypotheses'",
     costTitle: "Estimated cost",
-    costDesc: "~5 papers: Claude Sonnet $0.5–1 / GPT-4o $1–2 / Gemini Flash $0.1–0.5 / OpenRouter(DeepSeek) $0.05–0.2",
+    costDesc: "Cost depends on model, paper count, and output length. For a free start use Gemini 3.5 Flash or OpenRouter free; for maximum quality use Claude Opus 4.8 / GPT-5.5; for balance use Claude Sonnet 4.6 / GPT-5.4-mini.",
     capacityWarnTitle: (n: number, model: string) => `⚠ ${n} papers × ${model}`,
     capacityWarnBody: (maxSafe: number) =>
       `You're approaching this model's output limit — the JSON response may get truncated. Consider reducing to ${maxSafe} papers or switching to Claude Sonnet 4.6 (64K output).`,
