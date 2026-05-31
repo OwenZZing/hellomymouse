@@ -69,7 +69,7 @@ const tools = [
   },
   {
     slug: "surgery-trainer",
-    name: "Mouse Stereotaxic Surgery Trainer",
+    name: "Mouse Stereotaxic Trainer",
     description:
       "A no-animal educational simulator for practicing stereotaxic surgery workflow logic, coordinate checks, aseptic technique, welfare monitoring, recovery, and documentation.",
     tags: ["No-animal training", "Neuroscience", "Bilingual"],

@@ -69,7 +69,7 @@ const schemaMarkup = {
     {
       "@type": "WebApplication",
       "@id": `${SITE_URL}/tools/surgery-trainer#app`,
-      name: "Mouse Stereotaxic Surgery Trainer",
+      name: "Mouse Stereotaxic Trainer",
       url: `${SITE_URL}/tools/surgery-trainer`,
       description:
         "동물 없이 마우스 정위수술 workflow의 의사결정, 좌표 확인, 무균 준비, 동물복지 모니터링, 회복 기록을 연습하는 교육용 시뮬레이터.",

@@ -13,10 +13,10 @@ export default function SurgeryTrainerPage() {
               ← 홈으로
             </Link>
             <p className="mt-4 inline-flex rounded-lg border-2 border-[#35253a] bg-[#ffd166] px-3 py-1 font-mono text-xs font-black uppercase tracking-widest text-[#35253a] shadow-[3px_3px_0_#35253a]">
-              Mouse mission arcade
+              Mouse stereotaxic trainer
             </p>
             <h1 className="mt-3 text-4xl font-black tracking-tight text-[#35253a] [text-shadow:2px_2px_0_#ffd166,4px_4px_0_rgba(75,192,200,.55)] sm:text-5xl">
-              마우스 미션 아케이드
+              Mouse Stereotaxic Trainer
             </h1>
             <p className="mt-3 max-w-3xl text-sm font-bold leading-relaxed text-[#604b64]">
               동물 없이 연습하는 귀여운 정위수술 미니게임입니다. 실제 교육, IACUC 승인 프로토콜, 수의학적 지도,
@@ -32,7 +32,7 @@ export default function SurgeryTrainerPage() {
         </div>
 
         <iframe
-          title="Mouse Mission Arcade"
+          title="Mouse Stereotaxic Trainer"
           src="/surgery-trainer/index.html"
           className="h-[82vh] min-h-[720px] w-full rounded-lg border-4 border-[#35253a] bg-white shadow-[8px_8px_0_#35253a]"
           sandbox="allow-scripts allow-same-origin"

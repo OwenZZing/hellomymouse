@@ -75,7 +75,7 @@ const tools = [
   },
   {
     slug: "surgery-trainer",
-    name: "Mouse Stereotaxic Surgery Trainer",
+    name: "Mouse Stereotaxic Trainer",
     description:
       "마우스 정위수술 workflow를 동물 없이 연습하는 교육용 시뮬레이터입니다. 좌표, aseptic workflow, welfare monitoring, recovery documentation을 함께 점수화합니다.",
     tags: ["No-animal training", "Neuroscience", "Bilingual"],

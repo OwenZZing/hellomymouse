@@ -13,10 +13,10 @@ export default function SurgeryTrainerPageEN() {
               ← Back to Home
             </Link>
             <p className="mt-4 inline-flex rounded-lg border-2 border-[#35253a] bg-[#ffd166] px-3 py-1 font-mono text-xs font-black uppercase tracking-widest text-[#35253a] shadow-[3px_3px_0_#35253a]">
-              Mouse mission arcade
+              Mouse stereotaxic trainer
             </p>
             <h1 className="mt-3 text-4xl font-black tracking-tight text-[#35253a] [text-shadow:2px_2px_0_#ffd166,4px_4px_0_rgba(75,192,200,.55)] sm:text-5xl">
-              Mouse Mission Arcade
+              Mouse Stereotaxic Trainer
             </h1>
             <p className="mt-3 max-w-3xl text-sm font-bold leading-relaxed text-[#604b64]">
               A cute no-animal stereotaxic practice mini-game. It does not replace institutional training,
@@ -32,7 +32,7 @@ export default function SurgeryTrainerPageEN() {
         </div>
 
         <iframe
-          title="Mouse Mission Arcade"
+          title="Mouse Stereotaxic Trainer"
           src="/surgery-trainer/index.html"
           className="h-[82vh] min-h-[720px] w-full rounded-lg border-4 border-[#35253a] bg-white shadow-[8px_8px_0_#35253a]"
           sandbox="allow-scripts allow-same-origin"
