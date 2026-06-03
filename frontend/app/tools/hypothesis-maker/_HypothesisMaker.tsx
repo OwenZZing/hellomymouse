@@ -489,6 +489,25 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     return String(e).replace(/^Error:\s*/, "");
   };
 
+  const reportFailure = async (stage: string, errorText: string, id = jobId) => {
+    try {
+      await fetch(`${API_URL}/api/failure-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: id,
+          provider,
+          model,
+          paper_count: labFiles.length,
+          stage,
+          error: errorText,
+          user_comment: "[auto]",
+          contact: "",
+        }),
+      });
+    } catch {}
+  };
+
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
@@ -516,7 +535,9 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setSessionId(data.session_id);
       setStep("scan");
     } catch (e) {
-      setError(formatFetchError(e));
+      const msg = formatFetchError(e);
+      setError(msg);
+      reportFailure("upload", msg);
     } finally {
       setLoading(false);
     }
@@ -536,7 +557,9 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setLabName(data.lab_name_guess || "");
       setStep("configure");
     } catch (e) {
-      setError(formatFetchError(e));
+      const msg = formatFetchError(e);
+      setError(msg);
+      reportFailure("stage0", msg);
     } finally {
       setLoading(false);
     }
@@ -591,6 +614,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           setLoading(false);
           if (d.error) {
             setError(d.error);
+            reportFailure(progressMsg || "analyze", d.error, data.job_id);
           } else {
             setStep("done");
             // 자동 다운로드 트리거 (사용자가 자리 비우는 동안 세션 만료 방지)
@@ -604,9 +628,12 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         es.close();
         setLoading(false);
         setError(c.connError);
+        reportFailure("progress_stream", c.connError, data.job_id);
       };
     } catch (e) {
-      setError(formatFetchError(e));
+      const msg = formatFetchError(e);
+      setError(msg);
+      reportFailure("analyze_start", msg);
       setLoading(false);
     }
   };
@@ -637,9 +664,13 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg === "404") {
-        setError("다운로드 실패: 분석 세션이 만료되었습니다. 다시 분석해 주세요.");
+        const errorText = "다운로드 실패: 분석 세션이 만료되었습니다. 다시 분석해 주세요.";
+        setError(errorText);
+        reportFailure("download", errorText);
       } else {
-        setError(`다운로드 오류: ${msg}`);
+        const errorText = `다운로드 오류: ${msg}`;
+        setError(errorText);
+        reportFailure("download", errorText);
       }
     }
   };
@@ -802,13 +833,17 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                   });
                   if (!r.ok) {
                     const d = await r.json().catch(() => ({ detail: "" }));
-                    setError(d.detail || (locale === "ko" ? "API 키 또는 모델 점검 실패" : "API key/model check failed"));
+                    const msg = d.detail || (locale === "ko" ? "API 키 또는 모델 점검 실패" : "API key/model check failed");
+                    setError(msg);
+                    reportFailure("preflight", msg);
                     setLoading(false);
                     return;
                   }
                   setStep("upload");
                 } catch (e) {
-                  setError(formatFetchError(e));
+                  const msg = formatFetchError(e);
+                  setError(msg);
+                  reportFailure("preflight", msg);
                 } finally {
                   setLoading(false);
                 }
