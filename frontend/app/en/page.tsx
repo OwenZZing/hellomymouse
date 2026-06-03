@@ -76,13 +76,6 @@ const tools = [
     status: "live",
   },
   {
-    slug: "hypothesis-maker-tester",
-    name: "Hypothesis Maker Tester",
-    description: "An under-construction page for testing the large-paper analysis pipeline.",
-    tags: ["Batch summary", "Markdown cache", "Testing"],
-    status: "construction",
-  },
-  {
     slug: null,
     name: "Coming Soon",
     description: "More tools in the works.",

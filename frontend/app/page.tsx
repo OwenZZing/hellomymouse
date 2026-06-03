@@ -82,13 +82,6 @@ const tools = [
     status: "live",
   },
   {
-    slug: "hypothesis-maker-tester",
-    name: "Hypothesis Maker Tester",
-    description: "대용량 논문 분석 파이프라인을 테스트하기 위한 공사중 페이지입니다.",
-    tags: ["Batch summary", "Markdown cache", "Testing"],
-    status: "construction",
-  },
-  {
     slug: null,
     name: "Coming Soon",
     description: "다음 프로젝트를 준비 중입니다.",

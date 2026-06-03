@@ -280,10 +280,6 @@ class AnalyzeBody(BaseModel):
     language: str = "ko"
 
 
-class AnalyzeTestBody(AnalyzeBody):
-    batch_size: int = 5
-
-
 @app.post("/api/analyze")
 async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10))):
     if body.session_id not in sessions:
@@ -313,14 +309,33 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
             client = APIClient(body.api_provider, body.api_key, body.model)
             pipeline = AnalysisPipeline(client, cb)
 
-            result = pipeline.run_full_analysis(
+            paper_analyses = pipeline.run_stage1(
                 session["lab_paths"],
                 session.get("ref_paths", []),
+                body.assigned_project,
+            )
+
+            stage2_input = paper_analyses
+            if len(paper_analyses) > 5:
+                cb("논문별 Markdown cache 및 batch synthesis 생성 중...", 70)
+                stage2_input = _write_markdown_cache(session, paper_analyses, 5, cb)
+                cb(f"{len(paper_analyses)}편을 {len(stage2_input)}개 batch로 압축 완료", 70)
+
+            result = pipeline.run_stage2(
+                stage2_input,
                 body.assigned_project,
                 body.professor_instructions,
                 body.language,
                 body.student_level,
             )
+            if len(paper_analyses) > 5:
+                result["paper_summaries"] = _paper_summaries_from_analyses(paper_analyses)
+                _merge_equipment_capabilities(result, paper_analyses)
+                result["batch_pipeline"] = {
+                    "paper_count": len(paper_analyses),
+                    "batch_count": len(stage2_input),
+                    "batch_size": 5,
+                }
 
             prof = re.sub(r'[^\w\s가-힣\-]', '', body.professor_name.strip())[:50]
             filename = f"Research_Starter_Kit_{prof}.docx" if prof else "Research_Starter_Kit.docx"
@@ -390,9 +405,38 @@ def _equipment_md_list(records) -> str:
     return "\n".join(items) or "- (none)"
 
 
-def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
-                               batch_size: int, cb) -> list[dict]:
-    cache_dir = os.path.join(session["tmpdir"], "test_markdown_cache")
+def _paper_summaries_from_analyses(paper_analyses: list[dict]) -> list[dict]:
+    summaries = []
+    for paper in paper_analyses:
+        key_results = paper.get("key_results", []) or []
+        limitations = paper.get("limitations", []) or []
+        summaries.append({
+            "filename": paper.get("filename", ""),
+            "title": paper.get("title", paper.get("filename", "")),
+            "method_tag": paper.get("method_tag", ""),
+            "summary": paper.get("summary", ""),
+            "key_finding": key_results[0] if key_results else "",
+            "limitation": paper.get("limitation_for_hypo") or (limitations[0] if limitations else ""),
+        })
+    return summaries
+
+
+def _merge_equipment_capabilities(result: dict, paper_analyses: list[dict]) -> None:
+    equipment = []
+    for paper in paper_analyses:
+        equipment.extend(paper.get("equipment_details", []) or [])
+    merged = _dedupe_named_records(equipment)
+    if not merged:
+        return
+
+    capabilities = result.setdefault("lab_capabilities", {})
+    existing = capabilities.get("equipment_or_models", []) or []
+    capabilities["equipment_or_models"] = _dedupe_named_records(existing + merged, limit=50)
+
+
+def _write_markdown_cache(session: dict, paper_analyses: list[dict],
+                          batch_size: int, cb) -> list[dict]:
+    cache_dir = os.path.join(session["tmpdir"], "markdown_cache")
     os.makedirs(cache_dir, exist_ok=True)
     compressed: list[dict] = []
 
@@ -495,73 +539,9 @@ def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
             "summary": summary,
             "limitation_for_hypo": limitation,
         })
-        cb(f"Test cache: {md_name} 생성 완료", 74 + min(batch_no * 2, 12))
+        cb(f"Batch cache: {md_name} 생성 완료", 70)
 
     return compressed
-
-
-@app.post("/api/analyze-test")
-async def start_test_analysis(body: AnalyzeTestBody, _rl=Depends(rate_limit("analyze-test", 10))):
-    if body.session_id not in sessions:
-        raise HTTPException(404, "세션을 찾을 수 없습니다.")
-
-    session = sessions[body.session_id]
-    job_id = str(uuid.uuid4())
-    queue: asyncio.Queue = asyncio.Queue()
-    jobs[job_id] = {"queue": queue, "result_path": None, "error": None, "_created": time.time(),
-                     "api_provider": body.api_provider, "model": body.model,
-                     "session_id": body.session_id}
-
-    loop = asyncio.get_event_loop()
-
-    def run_analysis():
-        from analyzer.api_client import APIClient
-        from analyzer.processor import AnalysisPipeline
-        from report.docx_builder import build_report
-
-        def cb(msg: str, pct: int):
-            loop.call_soon_threadsafe(queue.put_nowait, {"message": msg, "percent": pct, "done": False})
-
-        try:
-            client = APIClient(body.api_provider, body.api_key, body.model)
-            pipeline = AnalysisPipeline(client, cb)
-            paper_analyses = pipeline.run_stage1(
-                session["lab_paths"],
-                session.get("ref_paths", []),
-                body.assigned_project,
-            )
-            cb("Test mode: 논문별 Markdown cache 및 batch synthesis 생성 중...", 72)
-            compressed = _write_test_markdown_cache(session, paper_analyses, body.batch_size, cb)
-            cb(f"Test mode: {len(paper_analyses)}편을 {len(compressed)}개 batch로 압축 완료", 86)
-            result = pipeline.run_stage2(
-                compressed,
-                body.assigned_project,
-                body.professor_instructions,
-                body.language,
-                body.student_level,
-            )
-            result["test_mode"] = {
-                "paper_count": len(paper_analyses),
-                "batch_count": len(compressed),
-                "batch_size": body.batch_size,
-            }
-
-            prof = re.sub(r'[^\w\s가-힣\-]', '', body.professor_name.strip())[:50]
-            filename = f"Research_Starter_Kit_TEST_{prof}.docx" if prof else "Research_Starter_Kit_TEST.docx"
-            output_path = os.path.join(session["tmpdir"], filename)
-            build_report(result, output_path)
-
-            jobs[job_id]["result_data"] = result
-            jobs[job_id]["result_path"] = output_path
-            jobs[job_id]["filename"] = filename
-            loop.call_soon_threadsafe(queue.put_nowait, {"message": "테스트 리포트 생성 완료!", "percent": 100, "done": True})
-        except Exception as e:
-            err = str(e)
-            jobs[job_id]["error"] = err
-            loop.call_soon_threadsafe(queue.put_nowait, {"message": err, "percent": 0, "done": True, "error": err})
-
-    threading.Thread(target=run_analysis, daemon=True).start()
-    return {"job_id": job_id}
 
 
 # ── Reviews ──────────────────────────────────────────────────
