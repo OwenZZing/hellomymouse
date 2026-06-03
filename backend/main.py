@@ -26,6 +26,7 @@ app = FastAPI(title="Hypothesis Maker API")
 _ALLOWED_ORIGINS = [
     "https://hellomymouse.com",
     "https://www.hellomymouse.com",
+    "https://hellomymouse.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
@@ -33,6 +34,7 @@ _ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,6 +120,16 @@ def _cleanup_loop():
 
 
 threading.Thread(target=_cleanup_loop, daemon=True).start()
+
+
+@app.get("/")
+async def root():
+    return {"ok": True, "service": "Hypothesis Maker API"}
+
+
+@app.get("/api/health")
+async def health():
+    return {"ok": True}
 
 
 # Max file size: 50 MB per file, 500 MB total

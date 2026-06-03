@@ -63,17 +63,16 @@ class APIClient:
     # Per-model safe output token caps
     _MAX_TOKENS = {
         # Claude 4.x
-        'claude-opus-4-8':             128000,
+        'claude-opus-4-7':             128000,
         'claude-sonnet-4-6':            64000,
         'claude-haiku-4-5-20251001':    64000,
         # OpenAI
-        'gpt-5.5':                     128000,
-        'gpt-5.4':                     128000,
-        'gpt-5.4-mini':                128000,
-        'gpt-5.4-nano':                128000,
+        'gpt-5.2':                     128000,
+        'gpt-5-mini':                  128000,
+        'gpt-5-nano':                  128000,
         'gpt-4o':                       16384,
         # Gemini
-        'gemini-3.5-flash':             65536,
+        'gemini-3-flash-preview':       65536,
         'gemini-2.5-pro':               65536,
         'gemini-2.5-flash':             65536,
         'gemini-2.5-flash-lite':        65536,

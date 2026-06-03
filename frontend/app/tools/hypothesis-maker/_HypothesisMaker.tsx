@@ -45,9 +45,9 @@ interface Project {
 type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
 
 const MODELS: Record<Provider, string[]> = {
-  claude: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
-  openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-4o"],
-  gemini: ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
+  claude: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+  openai: ["gpt-5.2", "gpt-5-mini", "gpt-5-nano", "gpt-4o"],
+  gemini: ["gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
   openrouter: [
     "openrouter/free",
     "deepseek/deepseek-v4-flash:free",
@@ -61,15 +61,14 @@ const MODELS: Record<Provider, string[]> = {
 
 // Per-model output token cap (must mirror backend analyzer/api_client.py::_MAX_TOKENS)
 const MODEL_OUTPUT_CAP: Record<string, number> = {
-  "claude-opus-4-8": 128000,
+  "claude-opus-4-7": 128000,
   "claude-sonnet-4-6": 64000,
   "claude-haiku-4-5-20251001": 64000,
-  "gpt-5.5": 128000,
-  "gpt-5.4": 128000,
-  "gpt-5.4-mini": 128000,
-  "gpt-5.4-nano": 128000,
+  "gpt-5.2": 128000,
+  "gpt-5-mini": 128000,
+  "gpt-5-nano": 128000,
   "gpt-4o": 16384,
-  "gemini-3.5-flash": 65536,
+  "gemini-3-flash-preview": 65536,
   "gemini-2.5-pro": 65536,
   "gemini-2.5-flash": 65536,
   "gemini-2.5-flash-lite": 65536,
@@ -120,13 +119,13 @@ const PROVIDER_GUIDES: Record<Provider, { url: string; ko: string; en: string }>
   },
   openai: {
     url: "https://platform.openai.com/api-keys",
-    ko: "OpenAI Platform → API Keys. 카드 등록 + 선결제 필요. GPT-5.4-mini는 비용/품질 균형형, GPT-5.5는 최고성능 옵션입니다.",
-    en: "OpenAI Platform → API Keys. Card + prepay required. GPT-5.4-mini balances cost/quality; GPT-5.5 is the top-capability option.",
+    ko: "OpenAI Platform → API Keys. 카드 등록 + 선결제 필요. GPT-5 mini는 비용/품질 균형형, GPT-5.2는 고성능 옵션입니다.",
+    en: "OpenAI Platform → API Keys. Card + prepay required. GPT-5 mini balances cost/quality; GPT-5.2 is the high-capability option.",
   },
   gemini: {
     url: "https://aistudio.google.com/app/apikey",
-    ko: "★ 무료 사용 추천 ★ Google AI Studio → Get API Key. 카드 없이 시작 가능. Gemini 3.5 Flash가 기본 추천 모델입니다.",
-    en: "★ RECOMMENDED FREE ★ Google AI Studio → Get API Key. Card-free start available. Gemini 3.5 Flash is the default recommended model.",
+    ko: "★ 무료 사용 추천 ★ Google AI Studio → Get API Key. 카드 없이 시작 가능. Gemini 2.5 Flash가 안정적인 기본 추천 모델입니다.",
+    en: "★ RECOMMENDED FREE ★ Google AI Studio → Get API Key. Card-free start available. Gemini 2.5 Flash is the stable default recommended model.",
   },
   openrouter: {
     url: "https://openrouter.ai/settings/keys",
@@ -180,7 +179,7 @@ const COPY = {
     instrLabel: "추가 지시사항 (선택사항)",
     instrPlaceholder: "예: '교수님이 소프트 로봇 그리퍼 쪽을 맡아보라고 하셨어요' 또는 '특히 에너지 효율 관련 가설을 중점적으로 뽑아주세요'",
     costTitle: "비용 안내",
-    costDesc: "비용은 모델·논문 수·출력 길이에 따라 달라집니다. 무료 시작은 Gemini 3.5 Flash 또는 OpenRouter free, 최고 품질은 Claude Opus 4.8 / GPT-5.5, 균형형은 Claude Sonnet 4.6 / GPT-5.4-mini를 권장합니다.",
+    costDesc: "비용은 모델·논문 수·출력 길이에 따라 달라집니다. 무료 시작은 Gemini 2.5 Flash 또는 OpenRouter free, 최고 품질은 Claude Opus 4.7 / GPT-5.2, 균형형은 Claude Sonnet 4.6 / GPT-5 mini를 권장합니다.",
     capacityWarnTitle: (n: number, model: string) => `⚠ 논문 ${n}편 × ${model}`,
     capacityWarnBody: (maxSafe: number) =>
       `선택한 모델의 출력 한도에 가까워 결과가 잘릴 수 있습니다. 논문을 ${maxSafe}편 이하로 줄이거나 Claude Sonnet 4.6(64K 출력) 사용을 권장합니다.`,
@@ -261,7 +260,7 @@ const COPY = {
     instrLabel: "Additional instructions (optional)",
     instrPlaceholder: "e.g. 'My PI told me to focus on soft robotic grippers' or 'Emphasize energy-efficiency hypotheses'",
     costTitle: "Estimated cost",
-    costDesc: "Cost depends on model, paper count, and output length. For a free start use Gemini 3.5 Flash or OpenRouter free; for maximum quality use Claude Opus 4.8 / GPT-5.5; for balance use Claude Sonnet 4.6 / GPT-5.4-mini.",
+    costDesc: "Cost depends on model, paper count, and output length. For a free start use Gemini 2.5 Flash or OpenRouter free; for maximum quality use Claude Opus 4.7 / GPT-5.2; for balance use Claude Sonnet 4.6 / GPT-5 mini.",
     capacityWarnTitle: (n: number, model: string) => `⚠ ${n} papers × ${model}`,
     capacityWarnBody: (maxSafe: number) =>
       `You're approaching this model's output limit — the JSON response may get truncated. Consider reducing to ${maxSafe} papers or switching to Claude Sonnet 4.6 (64K output).`,
@@ -485,6 +484,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
   useEffect(() => { fetchReviews(); }, [fetchReviews]);
 
+  const formatFetchError = (e: unknown) => {
+    if (e instanceof TypeError) return c.connError;
+    return String(e).replace(/^Error:\s*/, "");
+  };
+
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
@@ -512,7 +516,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setSessionId(data.session_id);
       setStep("scan");
     } catch (e) {
-      setError(String(e));
+      setError(formatFetchError(e));
     } finally {
       setLoading(false);
     }
@@ -532,7 +536,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setLabName(data.lab_name_guess || "");
       setStep("configure");
     } catch (e) {
-      setError(String(e));
+      setError(formatFetchError(e));
     } finally {
       setLoading(false);
     }
@@ -602,7 +606,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         setError(c.connError);
       };
     } catch (e) {
-      setError(String(e));
+      setError(formatFetchError(e));
       setLoading(false);
     }
   };
@@ -804,7 +808,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                   }
                   setStep("upload");
                 } catch (e) {
-                  setError(String(e));
+                  setError(formatFetchError(e));
                 } finally {
                   setLoading(false);
                 }
