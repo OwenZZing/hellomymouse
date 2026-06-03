@@ -353,6 +353,43 @@ def _md_list(values) -> str:
     return "\n".join(f"- {v}" for v in items) or "- (none)"
 
 
+def _dedupe_named_records(records, limit: int = 30) -> list[dict]:
+    dedup: dict[str, dict] = {}
+    for item in records or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+        catalog = str(item.get("catalog_number", "")).strip()
+        key = f"{name.lower()}::{catalog.lower()}" if catalog else name.lower()
+        current = dedup.setdefault(key, {"name": name})
+        for field in ("manufacturer", "catalog_number", "description", "notes", "version"):
+            value = str(item.get(field, "")).strip()
+            if value and not current.get(field):
+                current[field] = value
+    return list(dedup.values())[:limit]
+
+
+def _equipment_md_list(records) -> str:
+    items = []
+    for item in records or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+        manufacturer = str(item.get("manufacturer", "")).strip()
+        catalog = str(item.get("catalog_number", "")).strip()
+        detail = []
+        if manufacturer:
+            detail.append(f"manufacturer: {manufacturer}")
+        if catalog:
+            detail.append(f"catalog_number: {catalog}")
+        items.append(f"- {name}" + (f" ({'; '.join(detail)})" if detail else ""))
+    return "\n".join(items) or "- (none)"
+
+
 def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
                                batch_size: int, cb) -> list[dict]:
     cache_dir = os.path.join(session["tmpdir"], "test_markdown_cache")
@@ -377,7 +414,7 @@ def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
 {_md_list(paper.get('techniques'))}
 
 ## Equipment / Reagents / Software
-{_md_list([x.get('name', '') for x in paper.get('equipment_details', [])])}
+{_equipment_md_list(paper.get('equipment_details'))}
 {_md_list([x.get('name', '') for x in paper.get('software_and_tools', [])])}
 
 ## Limitations
@@ -403,11 +440,17 @@ def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
         limitations = []
         futures = []
         terms = []
+        equipment = []
+        software = []
         for p in batch:
             techniques.extend(p.get("techniques", []) or [])
             limitations.extend(p.get("limitations", []) or [])
             futures.extend(p.get("future_directions", []) or [])
             terms.extend(p.get("key_terms", []) or [])
+            equipment.extend(p.get("equipment_details", []) or [])
+            software.extend(p.get("software_and_tools", []) or [])
+        equipment = _dedupe_named_records(equipment)
+        software = _dedupe_named_records(software)
         summary = " / ".join((p.get("summary") or p.get("title") or "")[:220] for p in batch if p)
         limitation = " / ".join((p.get("limitation_for_hypo") or "")[:180] for p in batch if p.get("limitation_for_hypo"))
         text = f"""# Batch {batch_no} Synthesis
@@ -420,6 +463,9 @@ def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
 
 ## Repeated Methods
 {_md_list(dict.fromkeys(techniques).keys())}
+
+## Equipment / Reagents / Models
+{_equipment_md_list(equipment)}
 
 ## Recurring Limitations
 {_md_list(limitations[:12])}
@@ -443,8 +489,8 @@ def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
             "limitations": limitations[:12],
             "future_directions": futures[:12],
             "key_terms": list(dict.fromkeys(terms))[:15],
-            "equipment_details": [],
-            "software_and_tools": [],
+            "equipment_details": equipment,
+            "software_and_tools": software,
             "paper_type": "batch",
             "summary": summary,
             "limitation_for_hypo": limitation,
