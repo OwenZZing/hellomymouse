@@ -614,7 +614,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           setLoading(false);
           if (d.error) {
             setError(d.error);
-            reportFailure(progressMsg || "analyze", d.error, data.job_id);
+            reportFailure(d.message || "analyze", d.error, data.job_id);
           } else {
             setStep("done");
             // 자동 다운로드 트리거 (사용자가 자리 비우는 동안 세션 만료 방지)

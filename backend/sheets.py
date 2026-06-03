@@ -10,6 +10,18 @@ _SPREADSHEET_ID = "16CnsaRjxfECbpE4mnoPdpGMydpbtSDEb5NltslfBO5s"
 
 _gc: gspread.Client | None = None
 
+_REVIEW_HEADERS = ["name", "field", "position", "stars", "comment", "provider", "model", "created"]
+_WIDGET_HEADERS = ["date", "stairs", "button_count", "usage_count", "view_count"]
+_FAILURE_HEADERS = [
+    "created", "provider", "model", "paper_count", "stage",
+    "error", "user_comment", "contact",
+]
+_TAB_HEADERS = {
+    "Reviews": _REVIEW_HEADERS,
+    "Stairs": _WIDGET_HEADERS,
+    "Failures": _FAILURE_HEADERS,
+}
+
 
 def _client() -> gspread.Client:
     global _gc
@@ -27,12 +39,18 @@ def _client() -> gspread.Client:
 
 def _sheet(tab: str) -> gspread.Worksheet:
     spreadsheet = _client().open_by_key(_SPREADSHEET_ID)
-    return spreadsheet.worksheet(tab)
+    try:
+        ws = spreadsheet.worksheet(tab)
+    except gspread.WorksheetNotFound:
+        header_count = len(_TAB_HEADERS.get(tab, [])) or 8
+        ws = spreadsheet.add_worksheet(title=tab, rows=1000, cols=max(header_count, 8))
+    headers = _TAB_HEADERS.get(tab)
+    if headers and not ws.row_values(1):
+        ws.append_row(headers)
+    return ws
 
 
 # ── Reviews ──────────────────────────────────────────────────
-
-_REVIEW_HEADERS = ["name", "field", "position", "stars", "comment", "provider", "model", "created"]
 
 
 def append_review(review: dict):
@@ -56,8 +74,6 @@ def delete_review(row_index: int):
 
 
 # ── Widget (Stairs) ──────────────────────────────────────────
-
-_WIDGET_HEADERS = ["date", "stairs", "button_count", "usage_count", "view_count"]
 
 
 def save_widget(date: str, stairs: int, button_count: int,
@@ -90,11 +106,6 @@ def _max_col_value(rows: list[list[str]], col_index: int) -> int:
 
 
 # ── Failures (analyzer failure feedback) ─────────────────────
-
-_FAILURE_HEADERS = [
-    "created", "provider", "model", "paper_count", "stage",
-    "error", "user_comment", "contact",
-]
 
 
 def append_failure(entry: dict):
