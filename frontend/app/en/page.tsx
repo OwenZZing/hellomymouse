@@ -76,6 +76,13 @@ const tools = [
     status: "live",
   },
   {
+    slug: "hypothesis-maker-tester",
+    name: "Hypothesis Maker Tester",
+    description: "An under-construction page for testing the large-paper analysis pipeline.",
+    tags: ["Batch summary", "Markdown cache", "Testing"],
+    status: "construction",
+  },
+  {
     slug: null,
     name: "Coming Soon",
     description: "More tools in the works.",
@@ -289,18 +296,28 @@ export default function HomeEN() {
         <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-3">Tools</h2>
         <div className="grid gap-4">
           {tools.map((tool, i) =>
-            tool.status === "live" && tool.slug ? (
+            tool.slug ? (
               <Link
                 key={i}
                 href={`/en/tools/${tool.slug}`}
-                className="group block p-6 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:border-violet-500/50 hover:bg-zinc-900 transition-all duration-200"
+                className={`group block p-6 rounded-xl border transition-all duration-200 ${
+                  tool.status === "live"
+                    ? "border-zinc-800 bg-zinc-900/50 hover:border-violet-500/50 hover:bg-zinc-900"
+                    : "border-zinc-800/70 bg-zinc-900/25 hover:border-amber-500/40 hover:bg-zinc-900/40"
+                }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-lg font-semibold text-zinc-100 group-hover:text-violet-300 transition-colors">
                     {tool.name}
                   </h3>
-                  <span className="text-xs font-mono px-2 py-1 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
-                    live
+                  <span
+                    className={`text-xs font-mono px-2 py-1 rounded-full border ${
+                      tool.status === "live"
+                        ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    }`}
+                  >
+                    {tool.status === "live" ? "live" : "under construction"}
                   </span>
                 </div>
                 <p className="text-zinc-400 text-sm leading-relaxed mb-4">{tool.description}</p>
