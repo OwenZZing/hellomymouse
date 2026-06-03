@@ -3,6 +3,15 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+type Provider = "claude" | "openai" | "gemini" | "openrouter";
+const MODELS: Record<Provider, string[]> = {
+  claude: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+  openai: ["gpt-5.2", "gpt-5-mini", "gpt-5-nano", "gpt-4o"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
+  openrouter: ["openrouter/free"],
+};
+
 function safeName(name: string) {
   return name
     .replace(/\.pdf$/i, "")
@@ -32,6 +41,14 @@ export default function HypothesisMakerTesterPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [batchSize, setBatchSize] = useState(5);
   const [copied, setCopied] = useState(false);
+  const [provider, setProvider] = useState<Provider>("claude");
+  const [model, setModel] = useState(MODELS.claude[0]);
+  const [apiKey, setApiKey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState("");
+  const [error, setError] = useState("");
+  const [downloadReady, setDownloadReady] = useState(false);
 
   const plan = useMemo(() => buildPlan(files, batchSize), [files, batchSize]);
 
@@ -126,6 +143,88 @@ Do not re-send all per-paper analyses into the final hypothesis JSON call.
     URL.revokeObjectURL(url);
   };
 
+  const downloadDocx = async (jobId: string, sessionId: string) => {
+    const res = await fetch(`${API_URL}/api/download/${jobId}?session=${encodeURIComponent(sessionId)}`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Research_Starter_Kit_TEST.docx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const runTest = async () => {
+    if (!files.length) {
+      setError("PDF를 하나 이상 추가하세요.");
+      return;
+    }
+    if (!apiKey.trim()) {
+      setError("API key를 입력하세요.");
+      return;
+    }
+    setError("");
+    setDownloadReady(false);
+    setLoading(true);
+    setProgress(0);
+    setProgressMsg("PDF 업로드 중...");
+    try {
+      const form = new FormData();
+      files.forEach((file) => form.append("files", file));
+      const upload = await fetch(`${API_URL}/api/upload`, { method: "POST", body: form });
+      if (!upload.ok) throw new Error((await upload.json()).detail || "업로드 실패");
+      const uploaded = await upload.json();
+
+      setProgressMsg("Test mode 분석 시작...");
+      const started = await fetch(`${API_URL}/api/analyze-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: uploaded.session_id,
+          api_provider: provider,
+          api_key: apiKey,
+          model,
+          batch_size: batchSize,
+          language: "ko",
+          student_level: "beginner",
+        }),
+      });
+      if (!started.ok) throw new Error((await started.json()).detail || "분석 시작 실패");
+      const data = await started.json();
+      const es = new EventSource(
+        `${API_URL}/api/progress/${data.job_id}?session=${encodeURIComponent(uploaded.session_id)}`
+      );
+      es.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.percent >= 0) setProgress(msg.percent);
+        setProgressMsg(msg.message);
+        if (msg.done) {
+          es.close();
+          setLoading(false);
+          if (msg.error) {
+            setError(msg.error);
+          } else {
+            setDownloadReady(true);
+            downloadDocx(data.job_id, uploaded.session_id).catch((e) =>
+              setError(`자동 다운로드 실패: ${e instanceof Error ? e.message : String(e)}`)
+            );
+          }
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        setLoading(false);
+        setError("진행 상황 연결이 끊겼습니다. 잠시 후 다시 시도하세요.");
+      };
+    } catch (e) {
+      setLoading(false);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <main className="min-h-dvh bg-[#09090b] text-zinc-100">
       <div className="mx-auto max-w-5xl px-6 py-10">
@@ -159,7 +258,7 @@ Do not re-send all per-paper analyses into the final hypothesis JSON call.
             <label className="block rounded-lg border border-zinc-800 bg-zinc-900/50 p-5 transition-colors hover:border-violet-500/40">
               <span className="mb-2 block text-sm font-medium text-zinc-300">PDF 추가</span>
               <span className="mb-4 block text-xs leading-relaxed text-zinc-600">
-                파일 내용은 아직 읽지 않고, 파일명 기반으로 batch 계획과 Markdown 템플릿을 만듭니다.
+                실행하면 실제 PDF 내용을 읽고, 논문별 Markdown cache와 batch synthesis를 거쳐 docx까지 생성합니다.
               </span>
               <input
                 type="file"
@@ -181,6 +280,55 @@ Do not re-send all per-paper analyses into the final hypothesis JSON call.
                 <option value={5}>5편씩</option>
                 <option value={7}>7편씩</option>
               </select>
+            </div>
+
+            <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-300">AI 제공자</label>
+                <select
+                  value={provider}
+                  onChange={(e) => {
+                    const next = e.target.value as Provider;
+                    setProvider(next);
+                    setModel(MODELS[next][0]);
+                  }}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-violet-500"
+                >
+                  <option value="claude">Claude</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Gemini</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-300">모델</label>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-violet-500"
+                >
+                  {MODELS[provider].map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-300">API key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-violet-500"
+                  placeholder={provider === "claude" ? "sk-ant-..." : "sk-..."}
+                />
+              </div>
+              <button
+                onClick={runTest}
+                disabled={loading}
+                className="w-full rounded-lg bg-violet-600 py-3 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {loading ? "테스트 분석 중..." : "끝까지 테스트 실행"}
+              </button>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -209,6 +357,21 @@ Do not re-send all per-paper analyses into the final hypothesis JSON call.
           </section>
 
           <section className="min-w-0 space-y-4">
+            {(loading || progressMsg || error || downloadReady) && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-medium text-zinc-300">실행 상태</p>
+                  <p className="font-mono text-sm text-violet-400">{progress}%</p>
+                </div>
+                <div className="mb-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+                  <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${progress}%` }} />
+                </div>
+                {progressMsg && <p className="text-sm text-zinc-500">{progressMsg}</p>}
+                {downloadReady && <p className="mt-2 text-sm text-emerald-400">완료되었습니다. docx가 자동 다운로드됩니다.</p>}
+                {error && <p className="mt-2 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+              </div>
+            )}
+
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-zinc-200">생성될 중간 산출물</h2>

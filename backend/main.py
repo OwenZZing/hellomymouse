@@ -280,6 +280,10 @@ class AnalyzeBody(BaseModel):
     language: str = "ko"
 
 
+class AnalyzeTestBody(AnalyzeBody):
+    batch_size: int = 5
+
+
 @app.post("/api/analyze")
 async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10))):
     if body.session_id not in sessions:
@@ -339,6 +343,176 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
                 queue.put_nowait,
                 {"message": err, "percent": 0, "done": True, "error": err},
             )
+
+    threading.Thread(target=run_analysis, daemon=True).start()
+    return {"job_id": job_id}
+
+
+def _md_list(values) -> str:
+    items = [str(v).strip() for v in (values or []) if str(v).strip()]
+    return "\n".join(f"- {v}" for v in items) or "- (none)"
+
+
+def _write_test_markdown_cache(session: dict, paper_analyses: list[dict],
+                               batch_size: int, cb) -> list[dict]:
+    cache_dir = os.path.join(session["tmpdir"], "test_markdown_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    compressed: list[dict] = []
+
+    for i, paper in enumerate(paper_analyses, start=1):
+        filename = paper.get("filename", f"paper_{i}.pdf")
+        stem = re.sub(r"[^\w가-힣.-]+", "_", os.path.splitext(filename)[0])[:80]
+        md_name = f"paper_{i:02d}_{stem}.md"
+        md_path = os.path.join(cache_dir, md_name)
+        text = f"""# {paper.get('title') or filename}
+
+- source_pdf: {filename}
+- one_line_summary: {paper.get('summary', '')}
+- core_claim: {paper.get('key_results', [''])[0] if paper.get('key_results') else ''}
+
+## Key Results
+{_md_list(paper.get('key_results'))}
+
+## Materials and Methods
+{_md_list(paper.get('techniques'))}
+
+## Equipment / Reagents / Software
+{_md_list([x.get('name', '') for x in paper.get('equipment_details', [])])}
+{_md_list([x.get('name', '') for x in paper.get('software_and_tools', [])])}
+
+## Limitations
+{_md_list(paper.get('limitations'))}
+
+## Further Studies
+{_md_list(paper.get('future_directions'))}
+
+## Hypothesis Gap
+{paper.get('limitation_for_hypo', '')}
+"""
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    batch_size = max(2, min(batch_size, 10))
+    for start in range(0, len(paper_analyses), batch_size):
+        batch = paper_analyses[start:start + batch_size]
+        batch_no = len(compressed) + 1
+        md_name = f"batch_{batch_no:02d}_synthesis.md"
+        md_path = os.path.join(cache_dir, md_name)
+        titles = [p.get("title") or p.get("filename", "") for p in batch]
+        techniques = []
+        limitations = []
+        futures = []
+        terms = []
+        for p in batch:
+            techniques.extend(p.get("techniques", []) or [])
+            limitations.extend(p.get("limitations", []) or [])
+            futures.extend(p.get("future_directions", []) or [])
+            terms.extend(p.get("key_terms", []) or [])
+        summary = " / ".join((p.get("summary") or p.get("title") or "")[:220] for p in batch if p)
+        limitation = " / ".join((p.get("limitation_for_hypo") or "")[:180] for p in batch if p.get("limitation_for_hypo"))
+        text = f"""# Batch {batch_no} Synthesis
+
+## Papers
+{_md_list(titles)}
+
+## Shared Theme
+{summary}
+
+## Repeated Methods
+{_md_list(dict.fromkeys(techniques).keys())}
+
+## Recurring Limitations
+{_md_list(limitations[:12])}
+
+## Further Studies
+{_md_list(futures[:12])}
+
+## Strongest Follow-up Gaps
+{limitation or '(none detected)'}
+"""
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        compressed.append({
+            "filename": md_name,
+            "title": f"Batch {batch_no} synthesis ({len(batch)} papers)",
+            "is_reference": False,
+            "field": batch[0].get("field", "research") if batch else "research",
+            "method_tag": "batch synthesis",
+            "techniques": list(dict.fromkeys(techniques))[:12],
+            "key_results": [p.get("summary", "") for p in batch if p.get("summary")][:8],
+            "limitations": limitations[:12],
+            "future_directions": futures[:12],
+            "key_terms": list(dict.fromkeys(terms))[:15],
+            "equipment_details": [],
+            "software_and_tools": [],
+            "paper_type": "batch",
+            "summary": summary,
+            "limitation_for_hypo": limitation,
+        })
+        cb(f"Test cache: {md_name} 생성 완료", 74 + min(batch_no * 2, 12))
+
+    return compressed
+
+
+@app.post("/api/analyze-test")
+async def start_test_analysis(body: AnalyzeTestBody, _rl=Depends(rate_limit("analyze-test", 10))):
+    if body.session_id not in sessions:
+        raise HTTPException(404, "세션을 찾을 수 없습니다.")
+
+    session = sessions[body.session_id]
+    job_id = str(uuid.uuid4())
+    queue: asyncio.Queue = asyncio.Queue()
+    jobs[job_id] = {"queue": queue, "result_path": None, "error": None, "_created": time.time(),
+                     "api_provider": body.api_provider, "model": body.model,
+                     "session_id": body.session_id}
+
+    loop = asyncio.get_event_loop()
+
+    def run_analysis():
+        from analyzer.api_client import APIClient
+        from analyzer.processor import AnalysisPipeline
+        from report.docx_builder import build_report
+
+        def cb(msg: str, pct: int):
+            loop.call_soon_threadsafe(queue.put_nowait, {"message": msg, "percent": pct, "done": False})
+
+        try:
+            client = APIClient(body.api_provider, body.api_key, body.model)
+            pipeline = AnalysisPipeline(client, cb)
+            paper_analyses = pipeline.run_stage1(
+                session["lab_paths"],
+                session.get("ref_paths", []),
+                body.assigned_project,
+            )
+            cb("Test mode: 논문별 Markdown cache 및 batch synthesis 생성 중...", 72)
+            compressed = _write_test_markdown_cache(session, paper_analyses, body.batch_size, cb)
+            cb(f"Test mode: {len(paper_analyses)}편을 {len(compressed)}개 batch로 압축 완료", 86)
+            result = pipeline.run_stage2(
+                compressed,
+                body.assigned_project,
+                body.professor_instructions,
+                body.language,
+                body.student_level,
+            )
+            result["test_mode"] = {
+                "paper_count": len(paper_analyses),
+                "batch_count": len(compressed),
+                "batch_size": body.batch_size,
+            }
+
+            prof = re.sub(r'[^\w\s가-힣\-]', '', body.professor_name.strip())[:50]
+            filename = f"Research_Starter_Kit_TEST_{prof}.docx" if prof else "Research_Starter_Kit_TEST.docx"
+            output_path = os.path.join(session["tmpdir"], filename)
+            build_report(result, output_path)
+
+            jobs[job_id]["result_data"] = result
+            jobs[job_id]["result_path"] = output_path
+            jobs[job_id]["filename"] = filename
+            loop.call_soon_threadsafe(queue.put_nowait, {"message": "테스트 리포트 생성 완료!", "percent": 100, "done": True})
+        except Exception as e:
+            err = str(e)
+            jobs[job_id]["error"] = err
+            loop.call_soon_threadsafe(queue.put_nowait, {"message": err, "percent": 0, "done": True, "error": err})
 
     threading.Thread(target=run_analysis, daemon=True).start()
     return {"job_id": job_id}
