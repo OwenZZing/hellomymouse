@@ -479,6 +479,13 @@ async def progress_stream(job_id: str, session: str | None = None):
     queue = jobs[job_id]["queue"]
 
     async def generate():
+        if jobs[job_id].get("error"):
+            err = jobs[job_id]["error"]
+            yield f"data: {json.dumps({'message': err, 'percent': 0, 'done': True, 'error': err}, ensure_ascii=False)}\n\n"
+            return
+        if jobs[job_id].get("result_path"):
+            yield f"data: {json.dumps({'message': '리포트 생성 완료!', 'percent': 100, 'done': True}, ensure_ascii=False)}\n\n"
+            return
         while True:
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=60.0)

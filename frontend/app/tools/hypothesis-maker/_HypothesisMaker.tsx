@@ -34,6 +34,7 @@ function StarBackground() {
 
 type Provider = "claude" | "openai" | "gemini" | "openrouter";
 type Locale = "ko" | "en";
+const PENDING_JOB_KEY = "hypothesis_maker_pending_job";
 
 interface Project {
   id: number;
@@ -43,6 +44,16 @@ interface Project {
 }
 
 type Step = "setup" | "upload" | "scan" | "configure" | "analyze" | "done";
+
+interface PendingJob {
+  jobId: string;
+  sessionId: string;
+  provider: Provider;
+  model: string;
+  paperCount: number;
+  locale: Locale;
+  createdAt: number;
+}
 
 const MODELS: Record<Provider, string[]> = {
   claude: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
@@ -188,7 +199,8 @@ const COPY = {
       `이 조합은 거의 확실하게 출력이 잘립니다. 이전 단계로 돌아가 Claude Sonnet 4.6으로 변경하거나 논문을 ${maxSafe}편 이하로 줄여주세요.`,
     analyzeBtn: "분석 시작 →",
     analyzingTitle: "분석 진행 중...",
-    analyzeWait: "Stage 2 (가설 생성) 단계에서 10~15분 소요될 수 있습니다. 창을 닫지 마세요.",
+    analyzeWait: "Stage 2 (가설 생성) 단계에서 10~15분 소요될 수 있습니다. 완료되면 자동으로 다운로드됩니다.",
+    resumeWait: "이전 분석을 이어받는 중입니다. 완료되면 자동으로 다운로드됩니다.",
     retryBtn: "← 다시 시도",
     doneTitle: "리포트 완성!",
     doneDesc: "Research Starter Kit이 생성되었습니다.",
@@ -269,7 +281,8 @@ const COPY = {
       `This combination will almost certainly truncate. Go back and switch to Claude Sonnet 4.6, or reduce to ${maxSafe} papers or fewer.`,
     analyzeBtn: "Start Analysis →",
     analyzingTitle: "Analysis in progress...",
-    analyzeWait: "Stage 2 (hypothesis generation) may take 10-15 minutes. Do not close this window.",
+    analyzeWait: "Stage 2 (hypothesis generation) may take 10-15 minutes. The report downloads automatically when ready.",
+    resumeWait: "Resuming the previous analysis. The report downloads automatically when ready.",
     retryBtn: "← Retry",
     doneTitle: "Report ready!",
     doneDesc: "Your Research Starter Kit has been generated.",
@@ -565,8 +578,16 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     }
   };
 
-  const downloadFile = async (id: string) => {
-    const qs = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
+  const savePendingJob = (job: PendingJob) => {
+    localStorage.setItem(PENDING_JOB_KEY, JSON.stringify(job));
+  };
+
+  const clearPendingJob = () => {
+    localStorage.removeItem(PENDING_JOB_KEY);
+  };
+
+  const downloadFile = async (id: string, ownerSession = sessionId) => {
+    const qs = ownerSession ? `?session=${encodeURIComponent(ownerSession)}` : "";
     const res = await fetch(`${API_URL}/api/download/${id}${qs}`);
     if (!res.ok) {
       throw new Error(`${res.status}`);
@@ -581,6 +602,69 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  const autoDownload = async (id: string, ownerSession: string) => {
+    await downloadFile(id, ownerSession);
+    clearPendingJob();
+  };
+
+  const attachProgressStream = (id: string, ownerSession: string) => {
+    const es = new EventSource(
+      `${API_URL}/api/progress/${id}?session=${encodeURIComponent(ownerSession)}`
+    );
+    es.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      if (d.percent >= 0) setProgress(d.percent);
+      setProgressMsg(d.message);
+      if (d.done) {
+        es.close();
+        setLoading(false);
+        if (d.error) {
+          setError(d.error);
+          clearPendingJob();
+          reportFailure(d.message || "analyze", d.error, id);
+        } else {
+          setStep("done");
+          autoDownload(id, ownerSession).catch((err) => {
+            const msg = formatFetchError(err);
+            setError(locale === "ko" ? `자동 다운로드 실패: ${msg}` : `Auto-download failed: ${msg}`);
+            reportFailure("auto_download", msg, id);
+          });
+        }
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      setLoading(false);
+      setError(c.connError);
+      reportFailure("progress_stream", c.connError, id);
+    };
+  };
+
+  useEffect(() => {
+    const raw = localStorage.getItem(PENDING_JOB_KEY);
+    if (!raw) return;
+    try {
+      const pending = JSON.parse(raw) as PendingJob;
+      const isFresh = Date.now() - pending.createdAt < 60 * 60 * 1000;
+      if (!isFresh || pending.locale !== locale) {
+        clearPendingJob();
+        return;
+      }
+      setSessionId(pending.sessionId);
+      setJobId(pending.jobId);
+      setProvider(pending.provider);
+      setModel(pending.model);
+      setProgress(0);
+      setProgressMsg(c.resumeWait);
+      setError("");
+      setLoading(true);
+      setStep("analyze");
+      attachProgressStream(pending.jobId, pending.sessionId);
+    } catch {
+      clearPendingJob();
+    }
+  }, []);
 
   const handleAnalyze = async () => {
     setError("");
@@ -600,36 +684,17 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         language: locale,
       });
       setJobId(data.job_id);
+      savePendingJob({
+        jobId: data.job_id,
+        sessionId,
+        provider,
+        model,
+        paperCount: labFiles.length,
+        locale,
+        createdAt: Date.now(),
+      });
       setStep("analyze");
-
-      const es = new EventSource(
-        `${API_URL}/api/progress/${data.job_id}?session=${encodeURIComponent(sessionId)}`
-      );
-      es.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        if (d.percent >= 0) setProgress(d.percent);
-        setProgressMsg(d.message);
-        if (d.done) {
-          es.close();
-          setLoading(false);
-          if (d.error) {
-            setError(d.error);
-            reportFailure(d.message || "analyze", d.error, data.job_id);
-          } else {
-            setStep("done");
-            // 자동 다운로드 트리거 (사용자가 자리 비우는 동안 세션 만료 방지)
-            downloadFile(data.job_id).catch(() => {
-              // 자동 다운로드 실패는 조용히 무시 — 사용자가 수동 버튼으로 재시도 가능
-            });
-          }
-        }
-      };
-      es.onerror = () => {
-        es.close();
-        setLoading(false);
-        setError(c.connError);
-        reportFailure("progress_stream", c.connError, data.job_id);
-      };
+      attachProgressStream(data.job_id, sessionId);
     } catch (e) {
       const msg = formatFetchError(e);
       setError(msg);
@@ -661,6 +726,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const handleDownload = async () => {
     try {
       await downloadFile(jobId);
+      clearPendingJob();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg === "404") {
@@ -698,6 +764,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   };
 
   const handleReset = () => {
+    clearPendingJob();
     setStep("setup");
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
     setAssignedProject(""); setBgLevel("beginner"); setProfInstructions(""); setJobId("");
