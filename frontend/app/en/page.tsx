@@ -87,6 +87,7 @@ const tools = [
 interface Commit {
   sha: string;
   commit: { message: string; author: { date: string } };
+  files?: { filename: string }[];
 }
 
 function timeAgo(dateStr: string) {
@@ -97,12 +98,34 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function commitToolName(commit: Commit) {
+  const paths = commit.files?.map((file) => file.filename).join(" ") ?? "";
+  const message = commit.commit.message.toLowerCase();
+  const source = `${paths} ${message}`;
+  if (source.includes("surgery-trainer") || source.includes("stereotaxic") || source.includes("surgery trainer")) {
+    return "Mouse Stereotaxic Trainer";
+  }
+  if (source.includes("hypothesis-maker") || source.includes("hypothesis maker")) {
+    return "Hypothesis Maker";
+  }
+  return "Hellomymouse";
+}
+
 function RecentCommits() {
   const [commits, setCommits] = useState<Commit[]>([]);
 
   useEffect(() => {
     fetch("https://api.github.com/repos/OwenZZing/hellomymouse/commits?per_page=5")
       .then((r) => r.json())
+      .then((items: Commit[]) =>
+        Promise.all(
+          items.map((item) =>
+            fetch(`https://api.github.com/repos/OwenZZing/hellomymouse/commits/${item.sha}`)
+              .then((r) => r.json())
+              .catch(() => item)
+          )
+        )
+      )
       .then(setCommits)
       .catch(() => {});
   }, []);
@@ -118,7 +141,7 @@ function RecentCommits() {
         {commits.map((c) => (
           <div key={c.sha} className="flex items-baseline gap-3 font-mono text-xs">
             <span className="text-zinc-600 w-16 shrink-0">{timeAgo(c.commit.author.date)}</span>
-            <span className="text-violet-500">hypothesis-maker</span>
+            <span className="text-violet-500">{commitToolName(c)}</span>
             <span className="text-zinc-500 truncate">{c.commit.message.split("\n")[0]}</span>
           </div>
         ))}
