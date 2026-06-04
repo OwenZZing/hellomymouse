@@ -10,8 +10,13 @@ _GEMINI_STRICT_MODELS = {
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
 }
-# Fallback model when a strict model gets safety-blocked
-_GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
+# Safety fallback order. We skip the current model so the "fallback" path
+# always tries a genuinely different model instead of repeating the same call.
+_GEMINI_FALLBACK_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-3-flash-preview',
+]
 
 
 class APIClient:
@@ -367,15 +372,18 @@ class APIClient:
         except Exception:
             pass  # Fall through to model fallback
 
-        # Attempt 3: fallback to a less restrictive model
+        # Attempt 3: fallback to a different model
         if self.model in _GEMINI_STRICT_MODELS:
-            try:
-                time.sleep(1)
-                response = self._gemini_generate(_GEMINI_FALLBACK_MODEL, contents_v2, max_tokens)
-                if not self._is_safety_blocked(response):
-                    return response.text
-            except Exception:
-                pass
+            for fallback_model in _GEMINI_FALLBACK_MODELS:
+                if fallback_model == self.model:
+                    continue
+                try:
+                    time.sleep(1)
+                    response = self._gemini_generate(fallback_model, contents_v2, max_tokens)
+                    if not self._is_safety_blocked(response):
+                        return response.text
+                except Exception:
+                    continue
 
         raise RuntimeError(
             'Gemini 안전 필터에 의해 응답이 반복 차단됐습니다. '

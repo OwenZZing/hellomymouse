@@ -198,10 +198,10 @@ class AnalysisPipeline:
             alternatives.append('Claude Opus')
         if provider != 'claude' or 'sonnet' not in model:
             alternatives.append('Claude Sonnet')
-        if provider != 'openai':
-            alternatives.append('GPT-5.4-mini')
-        if provider != 'gemini':
-            alternatives.append('Gemini 3.5 Flash')
+        if provider != 'openai' or 'gpt-5-mini' not in model:
+            alternatives.append('GPT-5 mini')
+        if provider != 'gemini' or 'gemini-2.5-flash' not in model:
+            alternatives.append('Gemini 2.5 Flash')
 
         alt_str = ' / '.join(alternatives[:3]) if alternatives else '다른 모델'
         return (

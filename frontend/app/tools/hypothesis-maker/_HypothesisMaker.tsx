@@ -622,7 +622,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         if (d.error) {
           setError(d.error);
           clearPendingJob();
-          reportFailure(d.message || "analyze", d.error, id);
+          reportFailure("analyze", d.error, id);
         } else {
           setStep("done");
           autoDownload(id, ownerSession).catch((err) => {
