@@ -471,6 +471,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [error, setError] = useState("");
+  const [failureStage, setFailureStage] = useState("analyze");
   const [loading, setLoading] = useState(false);
   const [reviewName, setReviewName] = useState("");
   const [reviewField, setReviewField] = useState("");
@@ -484,6 +485,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [failureComment, setFailureComment] = useState("");
   const [failureContact, setFailureContact] = useState("");
   const [failureSubmitted, setFailureSubmitted] = useState(false);
+  const streamRetryCountRef = useRef(0);
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -503,6 +505,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   };
 
   const reportFailure = async (stage: string, errorText: string, id = jobId) => {
+    setFailureStage(stage);
     try {
       await fetch(`${API_URL}/api/failure-feedback`, {
         method: "POST",
@@ -613,6 +616,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       `${API_URL}/api/progress/${id}?session=${encodeURIComponent(ownerSession)}`
     );
     es.onmessage = (e) => {
+      streamRetryCountRef.current = 0;
       const d = JSON.parse(e.data);
       if (d.percent >= 0) setProgress(d.percent);
       setProgressMsg(d.message);
@@ -635,6 +639,16 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     };
     es.onerror = () => {
       es.close();
+      if (streamRetryCountRef.current < 2) {
+        streamRetryCountRef.current += 1;
+        setProgressMsg(
+          locale === "ko"
+            ? "연결이 잠시 끊겨 재연결 중..."
+            : "Connection dropped temporarily. Reconnecting..."
+        );
+        window.setTimeout(() => attachProgressStream(id, ownerSession), 1500 * streamRetryCountRef.current);
+        return;
+      }
       setLoading(false);
       setError(c.connError);
       reportFailure("progress_stream", c.connError, id);
@@ -751,7 +765,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           provider,
           model,
           paper_count: labFiles.length,
-          stage: progressMsg.slice(0, 200),
+          stage: failureStage,
           error,
           user_comment: failureComment,
           contact: failureContact,
@@ -769,6 +783,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
     setAssignedProject(""); setBgLevel("beginner"); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
+    setFailureStage("analyze");
     setReviewName(""); setReviewField(""); setReviewPosition(""); setReviewStars(0); setReviewComment(""); setReviewSubmitted(false);
     setFailureComment(""); setFailureContact(""); setFailureSubmitted(false);
   };

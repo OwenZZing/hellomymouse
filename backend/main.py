@@ -628,6 +628,63 @@ class FailureFeedbackBody(BaseModel):
     contact: str = ""
 
 
+_FAILURE_STAGE_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("preflight", ("preflight", "api key", "api 키", "사전 점검")),
+    ("upload", ("upload", "업로드", "50mb", "500mb")),
+    ("stage0", ("stage 0", "stage0", "quick scan", "프로젝트", "title", "abstract", "제목", "초록")),
+    ("stage1", ("stage 1", "stage1", "논문 심층 분석")),
+    ("stage2b", ("stage 2b", "stage2b", "checklist", "background", "roadmap", "체크리스트", "배경지식", "로드맵")),
+    ("stage2c", ("stage 2c", "stage2c", "starter task", "워밍업")),
+    ("auto_download", ("auto download", "auto-download", "자동 다운로드")),
+    ("download", ("download", "다운로드", "session expired", "세션이 만료")),
+    ("progress_stream", ("progress_stream", "eventsource", "server connection lost", "연결이 끊겼")),
+    ("analyze_start", ("analyze_start", "starting analysis", "분석 시작")),
+    ("analyze", ("stage 2", "stage2", "hypothesis", "json", "parse", "가설", "리포트 생성", "synthesis")),
+]
+
+_FAILURE_SIGNATURE_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("invalid_api_key", ("api key not valid", "invalid api key", "authentication", "api 키가 올바르지", "api 키가 유효하지")),
+    ("rate_limit", ("rate limit", "too many requests", "429", "요청이 너무 많습니다")),
+    ("quota_exhausted", ("quota exceeded", "resource_exhausted", "free-models-per-day", "daily limit", "add 10 credits")),
+    ("service_overloaded", ("503", "unavailable", "overloaded", "high demand", "과부하")),
+    ("gemini_safety_block", ("safety", "recitation", "차단", "안전 필터")),
+    ("json_parse_failure", ("json", "parse", "valid json", "truncated", "올바른 json")),
+    ("download_session_expired", ("session expired", "세션이 만료", "404")),
+    ("file_too_large", ("50mb", "파일이 너무 큽니다")),
+    ("total_upload_too_large", ("500mb", "전체 파일 크기")),
+    ("sheets_rate_limit", ("sheets api", "read requests", "spreadsheets", "sheets error")),
+]
+
+
+def _canonicalize_failure_stage(stage: str, error: str = "", user_comment: str = "") -> str:
+    direct = (stage or "").strip().lower().replace("-", "_").replace(" ", "_")
+    allowed = {name for name, _ in _FAILURE_STAGE_RULES}
+    if direct in allowed:
+        return direct
+
+    haystack = " ".join([stage or "", error or "", user_comment or ""]).strip().lower()
+    for canonical, needles in _FAILURE_STAGE_RULES:
+        if any(needle in haystack for needle in needles):
+            return canonical
+
+    sanitized = re.sub(r"[^a-z0-9_]+", "_", direct).strip("_")
+    return sanitized[:50] or "unknown"
+
+
+def _annotate_failure_error(error: str) -> str:
+    raw = " ".join((error or "").split())
+    if not raw:
+        return ""
+    if raw.startswith("[sig:"):
+        return raw[:2000]
+
+    lower = raw.lower()
+    for signature, needles in _FAILURE_SIGNATURE_RULES:
+        if any(needle in lower for needle in needles):
+            return f"[sig:{signature}] {raw}"[:2000]
+    return raw[:2000]
+
+
 @app.post("/api/failure-feedback")
 async def submit_failure_feedback(body: FailureFeedbackBody):
     """Record a failed-run feedback so we can learn what's actually breaking.
@@ -647,8 +704,8 @@ async def submit_failure_feedback(body: FailureFeedbackBody):
         "provider":     provider,
         "model":        model,
         "paper_count":  body.paper_count,
-        "stage":        body.stage,
-        "error":        error[:2000],          # cap huge tracebacks
+        "stage":        _canonicalize_failure_stage(body.stage, error, body.user_comment),
+        "error":        _annotate_failure_error(error),
         "user_comment": body.user_comment.strip()[:2000],
         "contact":      body.contact.strip()[:200],
     }
