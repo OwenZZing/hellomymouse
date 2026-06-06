@@ -611,6 +611,20 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     clearPendingJob();
   };
 
+  const tryRecoverFinishedJob = async (id: string, ownerSession: string) => {
+    try {
+      await downloadFile(id, ownerSession);
+      setProgress(100);
+      setProgressMsg(locale === "ko" ? "리포트 생성 완료!" : "Report ready!");
+      setError("");
+      setStep("done");
+      clearPendingJob();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const attachProgressStream = (id: string, ownerSession: string) => {
     const es = new EventSource(
       `${API_URL}/api/progress/${id}?session=${encodeURIComponent(ownerSession)}`
@@ -650,8 +664,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         return;
       }
       setLoading(false);
-      setError(c.connError);
-      reportFailure("progress_stream", c.connError, id);
+      void tryRecoverFinishedJob(id, ownerSession).then((recovered) => {
+        if (recovered) return;
+        setError(c.connError);
+        reportFailure("progress_stream", c.connError, id);
+      });
     };
   };
 

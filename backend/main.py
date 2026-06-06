@@ -45,6 +45,126 @@ sessions: dict[str, dict] = {}
 jobs: dict[str, dict] = {}
 import sheets  # Google Sheets persistence
 
+_STATE_ROOT = Path(tempfile.gettempdir()) / "hypothesis_maker_state"
+_SESSION_STATE_DIR = _STATE_ROOT / "sessions"
+_JOB_STATE_DIR = _STATE_ROOT / "jobs"
+
+
+def _ensure_state_dirs():
+    _SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _JOB_STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+_ensure_state_dirs()
+
+
+def _session_state_path(session_id: str) -> Path:
+    return _SESSION_STATE_DIR / f"{session_id}.json"
+
+
+def _job_state_path(job_id: str) -> Path:
+    return _JOB_STATE_DIR / f"{job_id}.json"
+
+
+def _write_state(path: Path, payload: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _read_state(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _delete_state(path: Path):
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _persist_session_state(session_id: str, session: dict):
+    payload = {
+        "session_id": session_id,
+        "lab_paths": list(session.get("lab_paths", [])),
+        "ref_paths": list(session.get("ref_paths", [])),
+        "tmpdir": session.get("tmpdir", ""),
+        "_created": session.get("_created", time.time()),
+    }
+    _write_state(_session_state_path(session_id), payload)
+
+
+def _load_session_state(session_id: str) -> dict | None:
+    payload = _read_state(_session_state_path(session_id))
+    if not payload:
+        return None
+    created = float(payload.get("_created", 0) or 0)
+    if created and time.time() - created > _SESSION_TTL_SECONDS:
+        _delete_state(_session_state_path(session_id))
+        return None
+    tmpdir = payload.get("tmpdir", "")
+    lab_paths = [p for p in payload.get("lab_paths", []) if isinstance(p, str) and os.path.exists(p)]
+    ref_paths = [p for p in payload.get("ref_paths", []) if isinstance(p, str) and os.path.exists(p)]
+    if not tmpdir or not os.path.isdir(tmpdir) or not lab_paths:
+        return None
+    session = {
+        "lab_paths": lab_paths,
+        "ref_paths": ref_paths,
+        "tmpdir": tmpdir,
+        "_created": created or time.time(),
+    }
+    sessions[session_id] = session
+    return session
+
+
+def _persist_job_state(job_id: str, job: dict):
+    payload = {
+        "job_id": job_id,
+        "session_id": job.get("session_id", ""),
+        "api_provider": job.get("api_provider", ""),
+        "model": job.get("model", ""),
+        "result_path": job.get("result_path", ""),
+        "filename": job.get("filename", ""),
+        "error": job.get("error", ""),
+        "_created": job.get("_created", time.time()),
+    }
+    _write_state(_job_state_path(job_id), payload)
+
+
+def _load_job_state(job_id: str) -> dict | None:
+    payload = _read_state(_job_state_path(job_id))
+    if not payload:
+        return None
+    created = float(payload.get("_created", 0) or 0)
+    if created and time.time() - created > _SESSION_TTL_SECONDS:
+        _delete_state(_job_state_path(job_id))
+        return None
+    result_path = payload.get("result_path", "")
+    if result_path and not os.path.exists(result_path):
+        result_path = ""
+    job = {
+        "queue": asyncio.Queue(),
+        "result_path": result_path,
+        "filename": payload.get("filename", ""),
+        "error": payload.get("error", ""),
+        "_created": created or time.time(),
+        "api_provider": payload.get("api_provider", ""),
+        "model": payload.get("model", ""),
+        "session_id": payload.get("session_id", ""),
+    }
+    jobs[job_id] = job
+    return job
+
+
+def _get_session(session_id: str) -> dict | None:
+    return sessions.get(session_id) or _load_session_state(session_id)
+
+
+def _get_job(job_id: str) -> dict | None:
+    return jobs.get(job_id) or _load_job_state(job_id)
+
 # ── Session / temp file cleanup ─────────────────────────────
 _SESSION_TTL_SECONDS = 3600  # 1 hour
 
@@ -59,10 +179,12 @@ def _cleanup_expired():
             if tmpdir and os.path.isdir(tmpdir):
                 shutil.rmtree(tmpdir, ignore_errors=True)
             sessions.pop(sid, None)
+            _delete_state(_session_state_path(sid))
     for jid in list(jobs):
         j = jobs[jid]
         if now - j.get("_created", now) > _SESSION_TTL_SECONDS:
             jobs.pop(jid, None)
+            _delete_state(_job_state_path(jid))
     # Drop rate-limit buckets that have no recent entries (prevents unbounded growth).
     cutoff = now - 120.0
     with _rate_lock:
@@ -195,6 +317,7 @@ async def upload_files(
         "tmpdir": tmpdir,
         "_created": time.time(),
     }
+    _persist_session_state(session_id, sessions[session_id])
     return {
         "session_id": session_id,
         "file_count": len(lab_paths),
@@ -244,10 +367,9 @@ async def preflight(body: PreflightBody, _rl=Depends(rate_limit("preflight", 30)
 
 @app.post("/api/stage0")
 async def run_stage0(body: Stage0Body, _rl=Depends(rate_limit("stage0", 20))):
-    if body.session_id not in sessions:
+    session = _get_session(body.session_id)
+    if session is None:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
-
-    session = sessions[body.session_id]
 
     from analyzer.api_client import APIClient
     from analyzer.processor import AnalysisPipeline
@@ -282,15 +404,15 @@ class AnalyzeBody(BaseModel):
 
 @app.post("/api/analyze")
 async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10))):
-    if body.session_id not in sessions:
+    session = _get_session(body.session_id)
+    if session is None:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
-
-    session = sessions[body.session_id]
     job_id = str(uuid.uuid4())
     queue: asyncio.Queue = asyncio.Queue()
     jobs[job_id] = {"queue": queue, "result_path": None, "error": None, "_created": time.time(),
                      "api_provider": body.api_provider, "model": body.model,
                      "session_id": body.session_id}
+    _persist_job_state(job_id, jobs[job_id])
 
     loop = asyncio.get_event_loop()
 
@@ -345,6 +467,7 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
             jobs[job_id]["result_data"] = result
             jobs[job_id]["result_path"] = output_path
             jobs[job_id]["filename"] = filename
+            _persist_job_state(job_id, jobs[job_id])
             # Count this as one successful use (cumulative counter, Sheets-backed)
             _increment_usage_count()
             loop.call_soon_threadsafe(
@@ -354,6 +477,7 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
         except Exception as e:
             err = str(e)
             jobs[job_id]["error"] = err
+            _persist_job_state(job_id, jobs[job_id])
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 {"message": err, "percent": 0, "done": True, "error": err},
@@ -722,9 +846,10 @@ async def submit_failure_feedback(body: FailureFeedbackBody):
 def _verify_job_owner(job_id: str, session_id: str | None):
     """Ensure the caller knows the session_id that created this job.
     Raises 404 (not 403) so we don't leak the existence of the job id."""
-    if job_id not in jobs:
+    job = _get_job(job_id)
+    if job is None:
         raise HTTPException(404, "Job not found")
-    owner = jobs[job_id].get("session_id")
+    owner = job.get("session_id")
     if owner and owner != session_id:
         raise HTTPException(404, "Job not found")
 
@@ -733,14 +858,18 @@ def _verify_job_owner(job_id: str, session_id: str | None):
 async def progress_stream(job_id: str, session: str | None = None):
     _verify_job_owner(job_id, session)
 
-    queue = jobs[job_id]["queue"]
+    job = _get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    queue = job["queue"]
 
     async def generate():
-        if jobs[job_id].get("error"):
-            err = jobs[job_id]["error"]
+        current = _get_job(job_id) or job
+        if current.get("error"):
+            err = current["error"]
             yield f"data: {json.dumps({'message': err, 'percent': 0, 'done': True, 'error': err}, ensure_ascii=False)}\n\n"
             return
-        if jobs[job_id].get("result_path"):
+        if current.get("result_path"):
             yield f"data: {json.dumps({'message': '리포트 생성 완료!', 'percent': 100, 'done': True}, ensure_ascii=False)}\n\n"
             return
         while True:
@@ -764,10 +893,13 @@ async def progress_stream(job_id: str, session: str | None = None):
 @app.get("/api/download/{job_id}")
 async def download(job_id: str, session: str | None = None):
     _verify_job_owner(job_id, session)
-    path = jobs[job_id].get("result_path")
+    job = _get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    path = job.get("result_path")
     if not path or not os.path.exists(path):
         raise HTTPException(404, "리포트가 아직 준비되지 않았습니다.")
-    filename = jobs[job_id].get("filename", "Research_Starter_Kit.docx")
+    filename = job.get("filename", "Research_Starter_Kit.docx")
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
