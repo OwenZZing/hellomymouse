@@ -35,6 +35,7 @@ function StarBackground() {
 type Provider = "claude" | "openai" | "gemini" | "openrouter";
 type Locale = "ko" | "en";
 const PENDING_JOB_KEY = "hypothesis_maker_pending_job";
+const FLOW_STATE_KEY = "hypothesis_maker_flow_state";
 
 interface Project {
   id: number;
@@ -51,6 +52,24 @@ interface PendingJob {
   provider: Provider;
   model: string;
   paperCount: number;
+  locale: Locale;
+  createdAt: number;
+}
+
+interface SavedFlowState {
+  step: Step;
+  sessionId: string;
+  jobId: string;
+  provider: Provider;
+  model: string;
+  labFileCount: number;
+  refFileCount: number;
+  projects: Project[];
+  labName: string;
+  assignedProject: string;
+  profName: string;
+  profInstructions: string;
+  bgLevel: string;
   locale: Locale;
   createdAt: number;
 }
@@ -460,6 +479,8 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [model, setModel] = useState(MODELS.claude[0]);
   const [labFiles, setLabFiles] = useState<File[]>([]);
   const [refFiles, setRefFiles] = useState<File[]>([]);
+  const [labFileCount, setLabFileCount] = useState(0);
+  const [refFileCount, setRefFileCount] = useState(0);
   const [sessionId, setSessionId] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [labName, setLabName] = useState("");
@@ -486,6 +507,8 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [failureContact, setFailureContact] = useState("");
   const [failureSubmitted, setFailureSubmitted] = useState(false);
   const streamRetryCountRef = useRef(0);
+  const paperCount = labFileCount || labFiles.length;
+  const referenceCount = refFileCount || refFiles.length;
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -514,7 +537,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           job_id: id,
           provider,
           model,
-          paper_count: labFiles.length,
+          paper_count: paperCount,
           stage,
           error: errorText,
           user_comment: "[auto]",
@@ -549,7 +572,19 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       if (!res.ok) throw new Error((await res.json()).detail);
       const data = await res.json();
       setSessionId(data.session_id);
+      setLabFileCount(labFiles.length);
+      setRefFileCount(refFiles.length);
       setStep("scan");
+      saveFlowState({
+        step: "scan",
+        sessionId: data.session_id,
+        jobId: "",
+        labFileCount: labFiles.length,
+        refFileCount: refFiles.length,
+        projects: [],
+        labName: "",
+        assignedProject: "",
+      });
     } catch (e) {
       const msg = formatFetchError(e);
       setError(msg);
@@ -572,6 +607,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setProjects(data.projects || []);
       setLabName(data.lab_name_guess || "");
       setStep("configure");
+      saveFlowState({
+        step: "configure",
+        projects: data.projects || [],
+        labName: data.lab_name_guess || "",
+      });
     } catch (e) {
       const msg = formatFetchError(e);
       setError(msg);
@@ -587,6 +627,32 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
   const clearPendingJob = () => {
     localStorage.removeItem(PENDING_JOB_KEY);
+  };
+
+  const saveFlowState = (next: Partial<SavedFlowState> = {}) => {
+    const flow: SavedFlowState = {
+      step,
+      sessionId,
+      jobId,
+      provider,
+      model,
+      labFileCount: paperCount,
+      refFileCount: referenceCount,
+      projects,
+      labName,
+      assignedProject,
+      profName,
+      profInstructions,
+      bgLevel,
+      locale,
+      createdAt: Date.now(),
+      ...next,
+    };
+    localStorage.setItem(FLOW_STATE_KEY, JSON.stringify(flow));
+  };
+
+  const clearFlowState = () => {
+    localStorage.removeItem(FLOW_STATE_KEY);
   };
 
   const downloadFile = async (id: string, ownerSession = sessionId) => {
@@ -618,6 +684,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setProgressMsg(locale === "ko" ? "리포트 생성 완료!" : "Report ready!");
       setError("");
       setStep("done");
+      saveFlowState({ step: "done", jobId: id, sessionId: ownerSession });
       clearPendingJob();
       return true;
     } catch {
@@ -640,9 +707,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         if (d.error) {
           setError(d.error);
           clearPendingJob();
+          saveFlowState({ step: "configure", jobId: id });
           reportFailure("analyze", d.error, id);
         } else {
           setStep("done");
+          saveFlowState({ step: "done", jobId: id });
           autoDownload(id, ownerSession).catch((err) => {
             const msg = formatFetchError(err);
             setError(locale === "ko" ? `자동 다운로드 실패: ${msg}` : `Auto-download failed: ${msg}`);
@@ -674,26 +743,60 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
   useEffect(() => {
     const raw = localStorage.getItem(PENDING_JOB_KEY);
-    if (!raw) return;
-    try {
-      const pending = JSON.parse(raw) as PendingJob;
-      const isFresh = Date.now() - pending.createdAt < 60 * 60 * 1000;
-      if (!isFresh || pending.locale !== locale) {
+    if (raw) {
+      try {
+        const pending = JSON.parse(raw) as PendingJob;
+        const isFresh = Date.now() - pending.createdAt < 60 * 60 * 1000;
+        if (!isFresh || pending.locale !== locale) {
+          clearPendingJob();
+        } else {
+          setSessionId(pending.sessionId);
+          setJobId(pending.jobId);
+          setProvider(pending.provider);
+          setModel(pending.model);
+          setLabFileCount(pending.paperCount);
+          setProgress(0);
+          setProgressMsg(c.resumeWait);
+          setError("");
+          setLoading(true);
+          setStep("analyze");
+          attachProgressStream(pending.jobId, pending.sessionId);
+          return;
+        }
+      } catch {
         clearPendingJob();
+      }
+    }
+
+    const flowRaw = localStorage.getItem(FLOW_STATE_KEY);
+    if (!flowRaw) return;
+    try {
+      const saved = JSON.parse(flowRaw) as SavedFlowState;
+      const isFresh = Date.now() - saved.createdAt < 60 * 60 * 1000;
+      if (!isFresh || saved.locale !== locale || !saved.sessionId) {
+        clearFlowState();
         return;
       }
-      setSessionId(pending.sessionId);
-      setJobId(pending.jobId);
-      setProvider(pending.provider);
-      setModel(pending.model);
-      setProgress(0);
-      setProgressMsg(c.resumeWait);
-      setError("");
-      setLoading(true);
-      setStep("analyze");
-      attachProgressStream(pending.jobId, pending.sessionId);
+      const restoredStep = saved.step === "analyze" ? "configure" : saved.step;
+      setStep(restoredStep);
+      setSessionId(saved.sessionId);
+      setJobId(saved.jobId || "");
+      setProvider(saved.provider);
+      setModel(saved.model);
+      setLabFileCount(saved.labFileCount || 0);
+      setRefFileCount(saved.refFileCount || 0);
+      setProjects(saved.projects || []);
+      setLabName(saved.labName || "");
+      setAssignedProject(saved.assignedProject || "");
+      setProfName(saved.profName || "");
+      setProfInstructions(saved.profInstructions || "");
+      setBgLevel(saved.bgLevel || "beginner");
+      if (restoredStep === "done" && saved.jobId) {
+        setProgress(100);
+        setProgressMsg(locale === "ko" ? "리포트 생성 완료!" : "Report ready!");
+      }
     } catch {
-      clearPendingJob();
+      clearFlowState();
     }
   }, []);
 
@@ -720,10 +823,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         sessionId,
         provider,
         model,
-        paperCount: labFiles.length,
+        paperCount,
         locale,
         createdAt: Date.now(),
       });
+      saveFlowState({ step: "analyze", jobId: data.job_id });
       setStep("analyze");
       attachProgressStream(data.job_id, sessionId);
     } catch (e) {
@@ -781,7 +885,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           job_id: jobId,
           provider,
           model,
-          paper_count: labFiles.length,
+          paper_count: paperCount,
           stage: failureStage,
           error,
           user_comment: failureComment,
@@ -796,8 +900,10 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
   const handleReset = () => {
     clearPendingJob();
+    clearFlowState();
     setStep("setup");
     setLabFiles([]); setRefFiles([]); setSessionId(""); setProjects([]);
+    setLabFileCount(0); setRefFileCount(0);
     setAssignedProject(""); setBgLevel("beginner"); setProfInstructions(""); setJobId("");
     setProgress(0); setProgressMsg(""); setError("");
     setFailureStage("analyze");
@@ -1021,7 +1127,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           <div className="space-y-6">
             <div className="p-5 rounded-xl bg-zinc-900 border border-zinc-800">
               <p className="text-sm text-zinc-400 mb-1">{c.uploadDoneLabel}</p>
-              <p className="text-zinc-100 font-medium">{c.uploadSummary(labFiles.length, refFiles.length)}</p>
+              <p className="text-zinc-100 font-medium">{c.uploadSummary(paperCount, referenceCount)}</p>
             </div>
             <div className="p-5 rounded-xl bg-violet-500/5 border border-violet-500/20">
               <p className="text-sm text-violet-300 font-medium mb-1">{c.scanStageLabel}</p>
@@ -1139,12 +1245,12 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
             {/* Capacity warning: raise this before the user commits to a
                 multi-minute analyze job with a too-small model. */}
             {(() => {
-              const cap = estimateCapacity(labFiles.length, model);
+              const cap = estimateCapacity(paperCount, model);
               if (cap.ratio >= 1.0) {
                 return (
                   <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/40">
                     <p className="text-sm text-red-400 font-semibold mb-1">
-                      {c.capacityDangerTitle(labFiles.length, model)}
+                      {c.capacityDangerTitle(paperCount, model)}
                     </p>
                     <p className="text-xs text-red-300/80 leading-relaxed">
                       {c.capacityDangerBody(cap.maxSafe)}
@@ -1156,7 +1262,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
                 return (
                   <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/40">
                     <p className="text-sm text-amber-400 font-semibold mb-1">
-                      {c.capacityWarnTitle(labFiles.length, model)}
+                      {c.capacityWarnTitle(paperCount, model)}
                     </p>
                     <p className="text-xs text-amber-300/80 leading-relaxed">
                       {c.capacityWarnBody(cap.maxSafe)}
