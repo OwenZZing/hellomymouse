@@ -507,6 +507,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   const [failureContact, setFailureContact] = useState("");
   const [failureSubmitted, setFailureSubmitted] = useState(false);
   const streamRetryCountRef = useRef(0);
+  const reconnectAttemptRef = useRef(0);
   const paperCount = labFileCount || labFiles.length;
   const referenceCount = refFileCount || refFiles.length;
 
@@ -686,10 +687,20 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       setStep("done");
       saveFlowState({ step: "done", jobId: id, sessionId: ownerSession });
       clearPendingJob();
+      reconnectAttemptRef.current = 0;
       return true;
     } catch {
       return false;
     }
+  };
+
+  const fetchJobStatus = async (id: string, ownerSession: string) => {
+    const qs = ownerSession ? `?session=${encodeURIComponent(ownerSession)}` : "";
+    const res = await fetch(`${API_URL}/api/job/${id}/status${qs}`);
+    if (!res.ok) {
+      throw new Error(`${res.status}`);
+    }
+    return res.json() as Promise<{ status: "running" | "done" | "error"; error?: string }>;
   };
 
   const attachProgressStream = (id: string, ownerSession: string) => {
@@ -698,6 +709,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     );
     es.onmessage = (e) => {
       streamRetryCountRef.current = 0;
+      reconnectAttemptRef.current = 0;
       const d = JSON.parse(e.data);
       if (d.percent >= 0) setProgress(d.percent);
       setProgressMsg(d.message);
@@ -707,11 +719,11 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         if (d.error) {
           setError(d.error);
           clearPendingJob();
-          saveFlowState({ step: "configure", jobId: id });
+          saveFlowState({ step: "configure", jobId: id, sessionId: ownerSession });
           reportFailure("analyze", d.error, id);
         } else {
           setStep("done");
-          saveFlowState({ step: "done", jobId: id });
+          saveFlowState({ step: "done", jobId: id, sessionId: ownerSession });
           autoDownload(id, ownerSession).catch((err) => {
             const msg = formatFetchError(err);
             setError(locale === "ko" ? `자동 다운로드 실패: ${msg}` : `Auto-download failed: ${msg}`);
@@ -733,11 +745,42 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         return;
       }
       setLoading(false);
-      void tryRecoverFinishedJob(id, ownerSession).then((recovered) => {
-        if (recovered) return;
-        setError(c.connError);
-        reportFailure("progress_stream", c.connError, id);
-      });
+      void fetchJobStatus(id, ownerSession)
+        .then(async (status) => {
+          if (status.status === "done") {
+            const recovered = await tryRecoverFinishedJob(id, ownerSession);
+            if (!recovered) {
+              setError(c.connError);
+              reportFailure("progress_stream", c.connError, id);
+            }
+            return;
+          }
+          if (status.status === "error") {
+            const msg = status.error || c.connError;
+            setError(msg);
+            clearPendingJob();
+            saveFlowState({ step: "configure", jobId: id, sessionId: ownerSession });
+            reportFailure("analyze", msg, id);
+            return;
+          }
+          if (reconnectAttemptRef.current < 3) {
+            reconnectAttemptRef.current += 1;
+            setLoading(true);
+            setProgressMsg(
+              locale === "ko"
+                ? "작업은 계속 진행 중입니다. 연결을 다시 확인합니다..."
+                : "The job is still running. Rechecking the connection..."
+            );
+            window.setTimeout(() => attachProgressStream(id, ownerSession), 2000 * reconnectAttemptRef.current);
+            return;
+          }
+          setError(c.connError);
+          reportFailure("progress_stream", c.connError, id);
+        })
+        .catch(() => {
+          setError(c.connError);
+          reportFailure("progress_stream", c.connError, id);
+        });
     };
   };
 
@@ -827,7 +870,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         locale,
         createdAt: Date.now(),
       });
-      saveFlowState({ step: "analyze", jobId: data.job_id });
+      saveFlowState({ step: "analyze", jobId: data.job_id, sessionId });
       setStep("analyze");
       attachProgressStream(data.job_id, sessionId);
     } catch (e) {

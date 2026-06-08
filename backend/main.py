@@ -888,6 +888,22 @@ async def progress_stream(job_id: str, session: str | None = None):
     )
 
 
+@app.get("/api/job/{job_id}/status")
+async def job_status(job_id: str, session: str | None = None):
+    _verify_job_owner(job_id, session)
+    job = _get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    if job.get("error"):
+        return {"status": "error", "error": job["error"]}
+    if job.get("result_path"):
+        return {
+            "status": "done",
+            "filename": job.get("filename", "Research_Starter_Kit.docx"),
+        }
+    return {"status": "running"}
+
+
 # ── Download docx ─────────────────────────────────────────────
 
 @app.get("/api/download/{job_id}")
