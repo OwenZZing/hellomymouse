@@ -48,11 +48,13 @@ import sheets  # Google Sheets persistence
 _STATE_ROOT = Path(tempfile.gettempdir()) / "hypothesis_maker_state"
 _SESSION_STATE_DIR = _STATE_ROOT / "sessions"
 _JOB_STATE_DIR = _STATE_ROOT / "jobs"
+_UPLOAD_ROOT_DIR = _STATE_ROOT / "uploads"
 
 
 def _ensure_state_dirs():
     _SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
     _JOB_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _UPLOAD_ROOT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 _ensure_state_dirs()
@@ -64,6 +66,10 @@ def _session_state_path(session_id: str) -> Path:
 
 def _job_state_path(job_id: str) -> Path:
     return _JOB_STATE_DIR / f"{job_id}.json"
+
+
+def _session_upload_dir(session_id: str) -> Path:
+    return _UPLOAD_ROOT_DIR / session_id
 
 
 def _write_state(path: Path, payload: dict):
@@ -83,6 +89,14 @@ def _delete_state(path: Path):
         path.unlink(missing_ok=True)
     except OSError:
         pass
+
+
+def _safe_rmtree(path: str | Path | None):
+    if not path:
+        return
+    target = Path(path)
+    if target.is_dir():
+        shutil.rmtree(target, ignore_errors=True)
 
 
 def _persist_session_state(session_id: str, session: dict):
@@ -175,9 +189,7 @@ def _cleanup_expired():
     for sid in list(sessions):
         s = sessions[sid]
         if now - s.get("_created", now) > _SESSION_TTL_SECONDS:
-            tmpdir = s.get("tmpdir")
-            if tmpdir and os.path.isdir(tmpdir):
-                shutil.rmtree(tmpdir, ignore_errors=True)
+            _safe_rmtree(s.get("tmpdir"))
             sessions.pop(sid, None)
             _delete_state(_session_state_path(sid))
     for jid in list(jobs):
@@ -275,7 +287,10 @@ async def upload_files(
     _rl=Depends(rate_limit("upload", 10)),
 ):
     session_id = str(uuid.uuid4())
-    tmpdir = tempfile.mkdtemp()
+    tmpdir_path = _session_upload_dir(session_id)
+    _safe_rmtree(tmpdir_path)
+    tmpdir_path.mkdir(parents=True, exist_ok=True)
+    tmpdir = str(tmpdir_path)
     total_size = 0
 
     lab_paths: list[str] = []
@@ -386,6 +401,11 @@ async def run_stage0(body: Stage0Body, _rl=Depends(rate_limit("stage0", 20))):
         "projects": result.get("projects", []),
         "lab_name_guess": result.get("lab_name_guess", ""),
     }
+
+
+@app.get("/api/session/{session_id}/status")
+async def session_status(session_id: str):
+    return {"exists": _get_session(session_id) is not None}
 
 
 # ── Full analysis (Stage 1 + 2) ───────────────────────────────

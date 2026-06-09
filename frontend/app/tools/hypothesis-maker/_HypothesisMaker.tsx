@@ -194,6 +194,7 @@ const COPY = {
     uploadDoneLabel: "업로드 완료",
     uploadSummary: (lab: number, ref: number) =>
       `연구실 논문 ${lab}편` + (ref > 0 ? ` · 참고 논문 ${ref}편` : ""),
+    sessionExpired: "저장된 분석 세션이 만료되었습니다. PDF를 다시 업로드해 주세요.",
     scanStageLabel: "Stage 0 — 빠른 스캔",
     scanStageDesc: "논문 제목과 초록만 읽어 연구실 프로젝트 목록을 파악합니다. API 비용이 소량 발생합니다.",
     scanBtn: "프로젝트 파악 시작 →",
@@ -276,6 +277,7 @@ const COPY = {
     uploadDoneLabel: "Upload complete",
     uploadSummary: (lab: number, ref: number) =>
       `${lab} lab paper${lab > 1 ? "s" : ""}` + (ref > 0 ? ` · ${ref} reference paper${ref > 1 ? "s" : ""}` : ""),
+    sessionExpired: "The saved analysis session expired. Please upload the PDFs again.",
     scanStageLabel: "Stage 0 — Quick Scan",
     scanStageDesc: "Reads only titles and abstracts to identify lab research projects. Minimal API cost.",
     scanBtn: "Identify Projects →",
@@ -528,6 +530,9 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     return String(e).replace(/^Error:\s*/, "");
   };
 
+  const isMissingSessionError = (msg: string) =>
+    msg === "404" || /세션을 찾을 수 없습니다|session expired|job not found/i.test(msg);
+
   const reportFailure = async (stage: string, errorText: string, id = jobId) => {
     setFailureStage(stage);
     try {
@@ -615,6 +620,10 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       });
     } catch (e) {
       const msg = formatFetchError(e);
+      if (isMissingSessionError(msg)) {
+        expireSavedSession();
+        return;
+      }
       setError(msg);
       reportFailure("stage0", msg);
     } finally {
@@ -654,6 +663,30 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
 
   const clearFlowState = () => {
     localStorage.removeItem(FLOW_STATE_KEY);
+  };
+
+  const expireSavedSession = () => {
+    clearPendingJob();
+    clearFlowState();
+    setStep("upload");
+    setSessionId("");
+    setJobId("");
+    setProjects([]);
+    setLabName("");
+    setAssignedProject("");
+    setLabFileCount(0);
+    setRefFileCount(0);
+    setProgress(0);
+    setProgressMsg("");
+    setLoading(false);
+    setError(c.sessionExpired);
+  };
+
+  const checkSessionAlive = async (id: string) => {
+    const res = await fetch(`${API_URL}/api/session/${encodeURIComponent(id)}/status`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    return Boolean(data.exists);
   };
 
   const downloadFile = async (id: string, ownerSession = sessionId) => {
@@ -785,62 +818,73 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   };
 
   useEffect(() => {
-    const raw = localStorage.getItem(PENDING_JOB_KEY);
-    if (raw) {
-      try {
-        const pending = JSON.parse(raw) as PendingJob;
-        const isFresh = Date.now() - pending.createdAt < 60 * 60 * 1000;
-        if (!isFresh || pending.locale !== locale) {
+    const resumePending = async () => {
+      const raw = localStorage.getItem(PENDING_JOB_KEY);
+      if (raw) {
+        try {
+          const pending = JSON.parse(raw) as PendingJob;
+          const isFresh = Date.now() - pending.createdAt < 60 * 60 * 1000;
+          if (!isFresh || pending.locale !== locale) {
+            clearPendingJob();
+          } else if (!(await checkSessionAlive(pending.sessionId).catch(() => false))) {
+            expireSavedSession();
+            return;
+          } else {
+            setSessionId(pending.sessionId);
+            setJobId(pending.jobId);
+            setProvider(pending.provider);
+            setModel(pending.model);
+            setLabFileCount(pending.paperCount);
+            setProgress(0);
+            setProgressMsg(c.resumeWait);
+            setError("");
+            setLoading(true);
+            setStep("analyze");
+            attachProgressStream(pending.jobId, pending.sessionId);
+            return;
+          }
+        } catch {
           clearPendingJob();
-        } else {
-          setSessionId(pending.sessionId);
-          setJobId(pending.jobId);
-          setProvider(pending.provider);
-          setModel(pending.model);
-          setLabFileCount(pending.paperCount);
-          setProgress(0);
-          setProgressMsg(c.resumeWait);
-          setError("");
-          setLoading(true);
-          setStep("analyze");
-          attachProgressStream(pending.jobId, pending.sessionId);
+        }
+      }
+
+      const flowRaw = localStorage.getItem(FLOW_STATE_KEY);
+      if (!flowRaw) return;
+      try {
+        const saved = JSON.parse(flowRaw) as SavedFlowState;
+        const isFresh = Date.now() - saved.createdAt < 60 * 60 * 1000;
+        if (!isFresh || saved.locale !== locale || !saved.sessionId) {
+          clearFlowState();
           return;
         }
+        if (!(await checkSessionAlive(saved.sessionId).catch(() => false))) {
+          expireSavedSession();
+          return;
+        }
+        const restoredStep = saved.step === "analyze" ? "configure" : saved.step;
+        setStep(restoredStep);
+        setSessionId(saved.sessionId);
+        setJobId(saved.jobId || "");
+        setProvider(saved.provider);
+        setModel(saved.model);
+        setLabFileCount(saved.labFileCount || 0);
+        setRefFileCount(saved.refFileCount || 0);
+        setProjects(saved.projects || []);
+        setLabName(saved.labName || "");
+        setAssignedProject(saved.assignedProject || "");
+        setProfName(saved.profName || "");
+        setProfInstructions(saved.profInstructions || "");
+        setBgLevel(saved.bgLevel || "beginner");
+        if (restoredStep === "done" && saved.jobId) {
+          setProgress(100);
+          setProgressMsg(locale === "ko" ? "리포트 생성 완료!" : "Report ready!");
+        }
       } catch {
-        clearPendingJob();
-      }
-    }
-
-    const flowRaw = localStorage.getItem(FLOW_STATE_KEY);
-    if (!flowRaw) return;
-    try {
-      const saved = JSON.parse(flowRaw) as SavedFlowState;
-      const isFresh = Date.now() - saved.createdAt < 60 * 60 * 1000;
-      if (!isFresh || saved.locale !== locale || !saved.sessionId) {
         clearFlowState();
-        return;
       }
-      const restoredStep = saved.step === "analyze" ? "configure" : saved.step;
-      setStep(restoredStep);
-      setSessionId(saved.sessionId);
-      setJobId(saved.jobId || "");
-      setProvider(saved.provider);
-      setModel(saved.model);
-      setLabFileCount(saved.labFileCount || 0);
-      setRefFileCount(saved.refFileCount || 0);
-      setProjects(saved.projects || []);
-      setLabName(saved.labName || "");
-      setAssignedProject(saved.assignedProject || "");
-      setProfName(saved.profName || "");
-      setProfInstructions(saved.profInstructions || "");
-      setBgLevel(saved.bgLevel || "beginner");
-      if (restoredStep === "done" && saved.jobId) {
-        setProgress(100);
-        setProgressMsg(locale === "ko" ? "리포트 생성 완료!" : "Report ready!");
-      }
-    } catch {
-      clearFlowState();
-    }
+    };
+
+    void resumePending();
   }, []);
 
   const handleAnalyze = async () => {
@@ -875,6 +919,10 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
       attachProgressStream(data.job_id, sessionId);
     } catch (e) {
       const msg = formatFetchError(e);
+      if (isMissingSessionError(msg)) {
+        expireSavedSession();
+        return;
+      }
       setError(msg);
       reportFailure("analyze_start", msg);
       setLoading(false);
@@ -908,9 +956,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg === "404") {
-        const errorText = "다운로드 실패: 분석 세션이 만료되었습니다. 다시 분석해 주세요.";
-        setError(errorText);
-        reportFailure("download", errorText);
+        expireSavedSession();
       } else {
         const errorText = `다운로드 오류: ${msg}`;
         setError(errorText);
