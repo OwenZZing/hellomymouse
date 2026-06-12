@@ -71,6 +71,52 @@ class StatePersistenceTests(unittest.TestCase):
         self.assertEqual(restored["filename"], "report.docx")
         self.assertEqual(restored["session_id"], "session-1")
 
+    def test_cleanup_keeps_expired_session_while_related_job_is_alive(self):
+        workdir = self.root / "upload"
+        workdir.mkdir()
+        pdf = workdir / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4")
+        main.sessions["session-1"] = {
+            "lab_paths": [str(pdf)],
+            "ref_paths": [],
+            "tmpdir": str(workdir),
+            "_created": time.time() - (main._SESSION_TTL_SECONDS + 10),
+        }
+        main.jobs["job-1"] = {
+            "queue": asyncio.Queue(),
+            "result_path": "",
+            "filename": "",
+            "error": "",
+            "_created": time.time(),
+            "api_provider": "claude",
+            "model": "claude-opus-4-7",
+            "session_id": "session-1",
+        }
+
+        main._cleanup_expired()
+
+        self.assertIn("session-1", main.sessions)
+        self.assertTrue(workdir.exists())
+
+    def test_cleanup_removes_expired_result_file_with_job(self):
+        report = self.root / "report.docx"
+        report.write_bytes(b"docx")
+        main.jobs["job-1"] = {
+            "queue": asyncio.Queue(),
+            "result_path": str(report),
+            "filename": "report.docx",
+            "error": "",
+            "_created": time.time() - (main._JOB_TTL_SECONDS + 10),
+            "api_provider": "claude",
+            "model": "claude-opus-4-7",
+            "session_id": "session-1",
+        }
+
+        main._cleanup_expired()
+
+        self.assertNotIn("job-1", main.jobs)
+        self.assertFalse(report.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

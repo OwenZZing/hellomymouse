@@ -49,12 +49,14 @@ _STATE_ROOT = Path(tempfile.gettempdir()) / "hypothesis_maker_state"
 _SESSION_STATE_DIR = _STATE_ROOT / "sessions"
 _JOB_STATE_DIR = _STATE_ROOT / "jobs"
 _UPLOAD_ROOT_DIR = _STATE_ROOT / "uploads"
+_RESULT_ROOT_DIR = _STATE_ROOT / "results"
 
 
 def _ensure_state_dirs():
     _SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
     _JOB_STATE_DIR.mkdir(parents=True, exist_ok=True)
     _UPLOAD_ROOT_DIR.mkdir(parents=True, exist_ok=True)
+    _RESULT_ROOT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 _ensure_state_dirs()
@@ -97,6 +99,15 @@ def _safe_rmtree(path: str | Path | None):
     target = Path(path)
     if target.is_dir():
         shutil.rmtree(target, ignore_errors=True)
+
+
+def _safe_unlink(path: str | Path | None):
+    if not path:
+        return
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _persist_session_state(session_id: str, session: dict):
@@ -147,12 +158,28 @@ def _persist_job_state(job_id: str, job: dict):
     _write_state(_job_state_path(job_id), payload)
 
 
+def _touch_session(session_id: str, session: dict | None = None):
+    current = session or sessions.get(session_id)
+    if current is None:
+        return
+    current["_created"] = time.time()
+    _persist_session_state(session_id, current)
+
+
+def _touch_job(job_id: str, job: dict | None = None):
+    current = job or jobs.get(job_id)
+    if current is None:
+        return
+    current["_created"] = time.time()
+    _persist_job_state(job_id, current)
+
+
 def _load_job_state(job_id: str) -> dict | None:
     payload = _read_state(_job_state_path(job_id))
     if not payload:
         return None
     created = float(payload.get("_created", 0) or 0)
-    if created and time.time() - created > _SESSION_TTL_SECONDS:
+    if created and time.time() - created > _JOB_TTL_SECONDS:
         _delete_state(_job_state_path(job_id))
         return None
     result_path = payload.get("result_path", "")
@@ -173,14 +200,30 @@ def _load_job_state(job_id: str) -> dict | None:
 
 
 def _get_session(session_id: str) -> dict | None:
-    return sessions.get(session_id) or _load_session_state(session_id)
+    session = sessions.get(session_id) or _load_session_state(session_id)
+    if session is not None:
+        _touch_session(session_id, session)
+    return session
 
 
 def _get_job(job_id: str) -> dict | None:
-    return jobs.get(job_id) or _load_job_state(job_id)
+    job = jobs.get(job_id) or _load_job_state(job_id)
+    if job is not None:
+        _touch_job(job_id, job)
+    return job
 
 # ── Session / temp file cleanup ─────────────────────────────
-_SESSION_TTL_SECONDS = 3600  # 1 hour
+_SESSION_TTL_SECONDS = 6 * 3600   # 6 hours of inactivity
+_JOB_TTL_SECONDS = 24 * 3600      # 24 hours so finished reports remain downloadable
+
+
+def _has_live_job_for_session(session_id: str, now: float) -> bool:
+    for job in jobs.values():
+        if job.get("session_id") != session_id:
+            continue
+        if now - job.get("_created", now) <= _JOB_TTL_SECONDS:
+            return True
+    return False
 
 
 def _cleanup_expired():
@@ -188,13 +231,14 @@ def _cleanup_expired():
     now = time.time()
     for sid in list(sessions):
         s = sessions[sid]
-        if now - s.get("_created", now) > _SESSION_TTL_SECONDS:
+        if now - s.get("_created", now) > _SESSION_TTL_SECONDS and not _has_live_job_for_session(sid, now):
             _safe_rmtree(s.get("tmpdir"))
             sessions.pop(sid, None)
             _delete_state(_session_state_path(sid))
     for jid in list(jobs):
         j = jobs[jid]
-        if now - j.get("_created", now) > _SESSION_TTL_SECONDS:
+        if now - j.get("_created", now) > _JOB_TTL_SECONDS:
+            _safe_unlink(j.get("result_path"))
             jobs.pop(jid, None)
             _delete_state(_job_state_path(jid))
     # Drop rate-limit buckets that have no recent entries (prevents unbounded growth).
@@ -385,6 +429,7 @@ async def run_stage0(body: Stage0Body, _rl=Depends(rate_limit("stage0", 20))):
     session = _get_session(body.session_id)
     if session is None:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
+    _touch_session(body.session_id, session)
 
     from analyzer.api_client import APIClient
     from analyzer.processor import AnalysisPipeline
@@ -427,6 +472,7 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
     session = _get_session(body.session_id)
     if session is None:
         raise HTTPException(404, "세션을 찾을 수 없습니다.")
+    _touch_session(body.session_id, session)
     job_id = str(uuid.uuid4())
     queue: asyncio.Queue = asyncio.Queue()
     jobs[job_id] = {"queue": queue, "result_path": None, "error": None, "_created": time.time(),
@@ -442,6 +488,8 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
         from report.docx_builder import build_report
 
         def cb(msg: str, pct: int):
+            _touch_job(job_id)
+            _touch_session(body.session_id, session)
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 {"message": msg, "percent": pct, "done": False},
@@ -481,13 +529,13 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
 
             prof = re.sub(r'[^\w\s가-힣\-]', '', body.professor_name.strip())[:50]
             filename = f"Research_Starter_Kit_{prof}.docx" if prof else "Research_Starter_Kit.docx"
-            output_path = os.path.join(session["tmpdir"], filename)
+            output_path = str(_RESULT_ROOT_DIR / f"{job_id}_{filename}")
             build_report(result, output_path)
 
             jobs[job_id]["result_data"] = result
             jobs[job_id]["result_path"] = output_path
             jobs[job_id]["filename"] = filename
-            _persist_job_state(job_id, jobs[job_id])
+            _touch_job(job_id, jobs[job_id])
             # Count this as one successful use (cumulative counter, Sheets-backed)
             _increment_usage_count()
             loop.call_soon_threadsafe(
@@ -497,7 +545,7 @@ async def start_analysis(body: AnalyzeBody, _rl=Depends(rate_limit("analyze", 10
         except Exception as e:
             err = str(e)
             jobs[job_id]["error"] = err
-            _persist_job_state(job_id, jobs[job_id])
+            _touch_job(job_id, jobs[job_id])
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 {"message": err, "percent": 0, "done": True, "error": err},
