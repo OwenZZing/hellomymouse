@@ -93,6 +93,23 @@ def _delete_state(path: Path):
         pass
 
 
+def _has_persisted_live_job_for_session(session_id: str, now: float) -> bool:
+    """Check job state files so session recovery survives in-memory loss."""
+    try:
+        job_paths = _JOB_STATE_DIR.glob("*.json")
+    except OSError:
+        return False
+
+    for job_path in job_paths:
+        payload = _read_state(job_path)
+        if not payload or payload.get("session_id") != session_id:
+            continue
+        created = float(payload.get("_created", 0) or 0)
+        if created and now - created <= _JOB_TTL_SECONDS:
+            return True
+    return False
+
+
 def _safe_rmtree(path: str | Path | None):
     if not path:
         return
@@ -126,9 +143,13 @@ def _load_session_state(session_id: str) -> dict | None:
     if not payload:
         return None
     created = float(payload.get("_created", 0) or 0)
-    if created and time.time() - created > _SESSION_TTL_SECONDS:
-        _delete_state(_session_state_path(session_id))
-        return None
+    now = time.time()
+    if created and now - created > _SESSION_TTL_SECONDS:
+        if _has_live_job_for_session(session_id, now) or _has_persisted_live_job_for_session(session_id, now):
+            created = now
+        else:
+            _delete_state(_session_state_path(session_id))
+            return None
     tmpdir = payload.get("tmpdir", "")
     lab_paths = [p for p in payload.get("lab_paths", []) if isinstance(p, str) and os.path.exists(p)]
     ref_paths = [p for p in payload.get("ref_paths", []) if isinstance(p, str) and os.path.exists(p)]

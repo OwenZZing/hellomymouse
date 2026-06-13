@@ -47,6 +47,41 @@ class StatePersistenceTests(unittest.TestCase):
         self.assertEqual(restored["lab_paths"], [str(pdf)])
         self.assertEqual(restored["tmpdir"], str(workdir))
 
+    def test_expired_persisted_session_is_restored_when_related_job_is_alive(self):
+        workdir = self.root / "upload"
+        workdir.mkdir()
+        pdf = workdir / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4")
+        session = {
+            "lab_paths": [str(pdf)],
+            "ref_paths": [],
+            "tmpdir": str(workdir),
+            "_created": time.time() - (main._SESSION_TTL_SECONDS + 10),
+        }
+        report = self.root / "report.docx"
+        report.write_bytes(b"docx")
+        job = {
+            "queue": asyncio.Queue(),
+            "result_path": str(report),
+            "filename": "report.docx",
+            "error": "",
+            "_created": time.time(),
+            "api_provider": "claude",
+            "model": "claude-opus-4-7",
+            "session_id": "session-1",
+        }
+
+        with patch.object(main, "_SESSION_STATE_DIR", self.sessions_dir), patch.object(main, "_JOB_STATE_DIR", self.jobs_dir):
+            main._persist_session_state("session-1", session)
+            main._persist_job_state("job-1", job)
+            main.sessions.clear()
+            main.jobs.clear()
+            restored = main._get_session("session-1")
+
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored["lab_paths"], [str(pdf)])
+        self.assertEqual(restored["tmpdir"], str(workdir))
+
     def test_persisted_completed_job_is_restored_after_memory_loss(self):
         report = self.root / "report.docx"
         report.write_bytes(b"docx")
