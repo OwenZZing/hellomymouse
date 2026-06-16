@@ -707,7 +707,16 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
   };
 
   const autoDownload = async (id: string, ownerSession: string) => {
-    await downloadFile(id, ownerSession);
+    try {
+      await downloadFile(id, ownerSession);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg !== "404") throw e;
+      const status = await fetchJobStatus(id, ownerSession).catch(() => null);
+      if (status?.status !== "done") throw e;
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      await downloadFile(id, ownerSession);
+    }
     clearPendingJob();
   };
 
@@ -817,6 +826,48 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
     };
   };
 
+  const resumeKnownJob = async (pending: PendingJob) => {
+    setSessionId(pending.sessionId);
+    setJobId(pending.jobId);
+    setProvider(pending.provider);
+    setModel(pending.model);
+    setLabFileCount(pending.paperCount);
+    setProgress(0);
+    setProgressMsg(c.resumeWait);
+    setError("");
+    setLoading(true);
+    setStep("analyze");
+
+    try {
+      const status = await fetchJobStatus(pending.jobId, pending.sessionId);
+      if (status.status === "done") {
+        const recovered = await tryRecoverFinishedJob(pending.jobId, pending.sessionId);
+        if (!recovered) {
+          setError(c.connError);
+          reportFailure("download", c.connError, pending.jobId);
+        }
+        return;
+      }
+      if (status.status === "error") {
+        const msg = status.error || c.connError;
+        setError(msg);
+        clearPendingJob();
+        saveFlowState({ step: "configure", jobId: pending.jobId, sessionId: pending.sessionId });
+        setStep("configure");
+        setLoading(false);
+        return;
+      }
+      attachProgressStream(pending.jobId, pending.sessionId);
+    } catch {
+      const sessionAlive = await checkSessionAlive(pending.sessionId).catch(() => false);
+      if (!sessionAlive) {
+        expireSavedSession();
+        return;
+      }
+      attachProgressStream(pending.jobId, pending.sessionId);
+    }
+  };
+
   useEffect(() => {
     const resumePending = async () => {
       const raw = localStorage.getItem(PENDING_JOB_KEY);
@@ -826,21 +877,8 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
           const isFresh = Date.now() - pending.createdAt < 60 * 60 * 1000;
           if (!isFresh || pending.locale !== locale) {
             clearPendingJob();
-          } else if (!(await checkSessionAlive(pending.sessionId).catch(() => false))) {
-            expireSavedSession();
-            return;
           } else {
-            setSessionId(pending.sessionId);
-            setJobId(pending.jobId);
-            setProvider(pending.provider);
-            setModel(pending.model);
-            setLabFileCount(pending.paperCount);
-            setProgress(0);
-            setProgressMsg(c.resumeWait);
-            setError("");
-            setLoading(true);
-            setStep("analyze");
-            attachProgressStream(pending.jobId, pending.sessionId);
+            await resumeKnownJob(pending);
             return;
           }
         } catch {
@@ -855,6 +893,18 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         const isFresh = Date.now() - saved.createdAt < 60 * 60 * 1000;
         if (!isFresh || saved.locale !== locale || !saved.sessionId) {
           clearFlowState();
+          return;
+        }
+        if (saved.jobId && (saved.step === "analyze" || saved.step === "done")) {
+          await resumeKnownJob({
+            jobId: saved.jobId,
+            sessionId: saved.sessionId,
+            provider: saved.provider,
+            model: saved.model,
+            paperCount: saved.labFileCount || 0,
+            locale: saved.locale,
+            createdAt: saved.createdAt,
+          });
           return;
         }
         if (!(await checkSessionAlive(saved.sessionId).catch(() => false))) {
