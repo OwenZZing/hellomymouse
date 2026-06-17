@@ -30,6 +30,12 @@ class FailureFeedbackNormalizationTests(unittest.TestCase):
         )
         self.assertTrue(annotated.startswith("[sig:service_overloaded] "))
 
+    def test_error_annotation_prefers_quota_over_generic_429(self):
+        annotated = _annotate_failure_error(
+            "Gemini API 오류: 429 RESOURCE_EXHAUSTED. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests"
+        )
+        self.assertTrue(annotated.startswith("[sig:quota_exhausted] "))
+
     def test_error_annotation_keeps_unknown_message(self):
         raw = "unexpected backend edge case"
         self.assertEqual(_annotate_failure_error(raw), raw)

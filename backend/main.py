@@ -857,8 +857,8 @@ _FAILURE_STAGE_RULES: list[tuple[str, tuple[str, ...]]] = [
 
 _FAILURE_SIGNATURE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("invalid_api_key", ("api key not valid", "invalid api key", "authentication", "api 키가 올바르지", "api 키가 유효하지")),
-    ("rate_limit", ("rate limit", "too many requests", "429", "요청이 너무 많습니다")),
     ("quota_exhausted", ("quota exceeded", "resource_exhausted", "free-models-per-day", "daily limit", "add 10 credits")),
+    ("rate_limit", ("rate limit", "too many requests", "429", "요청이 너무 많습니다")),
     ("service_overloaded", ("503", "unavailable", "overloaded", "high demand", "과부하")),
     ("gemini_safety_block", ("safety", "recitation", "차단", "안전 필터")),
     ("json_parse_failure", ("json", "parse", "valid json", "truncated", "올바른 json")),
