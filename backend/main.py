@@ -906,8 +906,11 @@ async def submit_failure_feedback(body: FailureFeedbackBody):
     provider = body.provider
     model = body.model
     error = body.error
-    if body.job_id and body.job_id in jobs:
-        j = jobs[body.job_id]
+    if body.job_id:
+        j = _get_job(body.job_id)
+    else:
+        j = None
+    if j:
         provider = provider or j.get("api_provider", "")
         model = model or j.get("model", "")
         error = error or (j.get("error") or "")

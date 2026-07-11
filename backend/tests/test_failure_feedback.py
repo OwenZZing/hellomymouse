@@ -1,9 +1,14 @@
 import unittest
+import asyncio
+import time
+import tempfile
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import main
 from main import _annotate_failure_error, _canonicalize_failure_stage
 
 
@@ -39,6 +44,43 @@ class FailureFeedbackNormalizationTests(unittest.TestCase):
     def test_error_annotation_keeps_unknown_message(self):
         raw = "unexpected backend edge case"
         self.assertEqual(_annotate_failure_error(raw), raw)
+
+    def test_failure_feedback_restores_persisted_job_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "report.docx"
+            report.write_bytes(b"docx")
+            job = {
+                "queue": asyncio.Queue(),
+                "result_path": str(report),
+                "filename": "report.docx",
+                "error": "AI가 올바른 JSON 형식으로 응답하지 않았습니다.",
+                "_created": time.time(),
+                "api_provider": "claude",
+                "model": "claude-opus-4-7",
+                "session_id": "session-1",
+            }
+            jobs_dir = Path(tmp) / "jobs"
+            jobs_dir.mkdir()
+
+            with (
+                patch.object(main, "_JOB_STATE_DIR", jobs_dir),
+                patch.object(main.sheets, "append_failure") as append_failure,
+            ):
+                main._persist_job_state("job-1", job)
+                main.jobs.clear()
+
+                body = main.FailureFeedbackBody(
+                    job_id="job-1",
+                    stage="stage2",
+                    user_comment="[auto]",
+                )
+                asyncio.run(main.submit_failure_feedback(body))
+
+        entry = append_failure.call_args.args[0]
+        self.assertEqual(entry["provider"], "claude")
+        self.assertEqual(entry["model"], "claude-opus-4-7")
+        self.assertTrue(entry["error"].startswith("[sig:json_parse_failure] "))
+        self.assertEqual(entry["stage"], "analyze")
 
 
 if __name__ == "__main__":
