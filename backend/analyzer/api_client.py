@@ -6,17 +6,24 @@ from config import DEFAULT_MODELS, OPENROUTER_FREE_MODELS
 # Gemini models known to have stricter safety enforcement
 _GEMINI_STRICT_MODELS = {
     'gemini-3-flash-preview',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-pro-preview',
 }
 # Safety fallback order. We skip the current model so the "fallback" path
 # always tries a genuinely different model instead of repeating the same call.
 _GEMINI_FALLBACK_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-3-flash-preview',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
 ]
+
+_GEMINI_RETIRED_MODEL_REPLACEMENTS = {
+    'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+    'gemini-2.5-flash': 'gemini-3.6-flash',
+    'gemini-2.5-flash-lite': 'gemini-3.5-flash-lite',
+}
 
 
 class APIClient:
@@ -24,6 +31,8 @@ class APIClient:
         self.provider = provider.lower()
         self.api_key = api_key
         self.model = model or DEFAULT_MODELS.get(self.provider, '')
+        if self.provider == 'gemini':
+            self.model = _GEMINI_RETIRED_MODEL_REPLACEMENTS.get(self.model, self.model)
 
         if self.provider == 'claude':
             self._init_claude()
@@ -117,9 +126,10 @@ class APIClient:
         'gpt-4o':                       16384,
         # Gemini
         'gemini-3-flash-preview':       65536,
-        'gemini-2.5-pro':               65536,
-        'gemini-2.5-flash':             65536,
-        'gemini-2.5-flash-lite':        65536,
+        'gemini-3.6-flash':             65536,
+        'gemini-3.5-flash':             65536,
+        'gemini-3.5-flash-lite':        65536,
+        'gemini-3.1-pro-preview':       65536,
         # OpenRouter free models
         'openrouter/free':               16384,
         'deepseek/deepseek-v4-flash:free': 128000,

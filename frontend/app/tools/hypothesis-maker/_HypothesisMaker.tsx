@@ -77,7 +77,7 @@ interface SavedFlowState {
 const MODELS: Record<Provider, string[]> = {
   claude: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
   openai: ["gpt-5.2", "gpt-5-mini", "gpt-5-nano", "gpt-4o"],
-  gemini: ["gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
+  gemini: ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"],
   openrouter: [
     "openrouter/free",
     "deepseek/deepseek-v4-flash:free",
@@ -89,6 +89,17 @@ const MODELS: Record<Provider, string[]> = {
   ],
 };
 
+const RETIRED_GEMINI_MODELS: Record<string, string> = {
+  "gemini-2.5-pro": "gemini-3.1-pro-preview",
+  "gemini-2.5-flash": "gemini-3.6-flash",
+  "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+};
+
+function supportedModel(provider: Provider, model: string): string {
+  const migrated = provider === "gemini" ? RETIRED_GEMINI_MODELS[model] ?? model : model;
+  return MODELS[provider].includes(migrated) ? migrated : MODELS[provider][0];
+}
+
 // Per-model output token cap (must mirror backend analyzer/api_client.py::_MAX_TOKENS)
 const MODEL_OUTPUT_CAP: Record<string, number> = {
   "claude-opus-4-7": 128000,
@@ -99,9 +110,10 @@ const MODEL_OUTPUT_CAP: Record<string, number> = {
   "gpt-5-nano": 128000,
   "gpt-4o": 16384,
   "gemini-3-flash-preview": 65536,
-  "gemini-2.5-pro": 65536,
-  "gemini-2.5-flash": 65536,
-  "gemini-2.5-flash-lite": 65536,
+  "gemini-3.6-flash": 65536,
+  "gemini-3.5-flash": 65536,
+  "gemini-3.5-flash-lite": 65536,
+  "gemini-3.1-pro-preview": 65536,
   // OpenRouter free models — caps from openrouter.ai/api/v1/models
   "openrouter/free": 16384,
   "deepseek/deepseek-v4-flash:free": 128000,
@@ -916,7 +928,7 @@ export default function HypothesisMaker({ locale = "ko" }: { locale?: Locale }) 
         setSessionId(saved.sessionId);
         setJobId(saved.jobId || "");
         setProvider(saved.provider);
-        setModel(saved.model);
+        setModel(supportedModel(saved.provider, saved.model));
         setLabFileCount(saved.labFileCount || 0);
         setRefFileCount(saved.refFileCount || 0);
         setProjects(saved.projects || []);

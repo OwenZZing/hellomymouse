@@ -1,7 +1,7 @@
 DEFAULT_MODELS = {
     'claude': 'claude-sonnet-4-6',
     'openai': 'gpt-5-mini',
-    'gemini': 'gemini-2.5-flash',
+    'gemini': 'gemini-3.6-flash',
     'openrouter': 'openrouter/free',
 }
 
@@ -29,10 +29,10 @@ MODEL_OPTIONS = {
         'gpt-4o',
     ],
     'gemini': [
-        'gemini-3-flash-preview',
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.1-pro-preview',
     ],
     'openrouter': OPENROUTER_FREE_MODELS,
 }

@@ -41,6 +41,12 @@ class FailureFeedbackNormalizationTests(unittest.TestCase):
         )
         self.assertTrue(annotated.startswith("[sig:quota_exhausted] "))
 
+    def test_error_annotation_classifies_retired_model(self):
+        annotated = _annotate_failure_error(
+            "Gemini API 오류: 404 NOT_FOUND. This model models/gemini-2.5-flash is no longer available to new users."
+        )
+        self.assertTrue(annotated.startswith("[sig:model_unavailable] "))
+
     def test_error_annotation_keeps_unknown_message(self):
         raw = "unexpected backend edge case"
         self.assertEqual(_annotate_failure_error(raw), raw)
